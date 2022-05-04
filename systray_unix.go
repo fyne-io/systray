@@ -17,6 +17,7 @@ import (
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/godbus/dbus/v5/prop"
+	"golang.org/x/image/draw"
 
 	"fyne.io/systray/internal/generated/menu"
 	"fyne.io/systray/internal/generated/notifier"
@@ -274,6 +275,9 @@ type tooltip = struct {
 	V3 string // description
 }
 
+// ScaleImagesToPixelWidth may be set to automatically scale images to the given size in pixels. This variable may only be changed before calling any function of the library.
+var ScaleImagesToPixelWidth int
+
 func convertToPixels(data []byte) PX {
 	if len(data) == 0 {
 		return PX{}
@@ -281,8 +285,16 @@ func convertToPixels(data []byte) PX {
 
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		log.Printf("Failed to read icon format %v", err)
+		log.Printf("systray error: failed to read icon format: %s\n", err)
 		return PX{}
+	}
+
+	// Scale image if configured and source size is different.
+	if ScaleImagesToPixelWidth > 0 && ScaleImagesToPixelWidth != img.Bounds().Dx() {
+		rectangle := image.Rect(0, 0, ScaleImagesToPixelWidth, ScaleImagesToPixelWidth)
+		scaledImage := image.NewRGBA(rectangle)
+		draw.BiLinear.Scale(scaledImage, rectangle, img, img.Bounds(), draw.Over, nil)
+		img = scaledImage
 	}
 
 	return PX{
