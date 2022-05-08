@@ -32,7 +32,7 @@ var (
 	quitChan = make(chan struct{})
 
 	// instance is the current instance of our DBus tray server
-	instance = &tray{menu: &menuLayout{}}
+	instance = &tray{menu: &menuLayout{}, menuVersion: 1}
 )
 
 // SetTemplateIcon sets the systray icon as a template icon (on macOS), falling back
@@ -175,7 +175,7 @@ func nativeStart() {
 		log.Printf("systray error: failed to export notifier item properties to bus: %s\n", err)
 		return
 	}
-	_, err = prop.Export(conn, menuPath, createMenuPropSpec())
+	instance.menuProps, err = prop.Export(conn, menuPath, createMenuPropSpec())
 	if err != nil {
 		log.Printf("systray error: failed to export notifier menu properties to bus: %s\n", err)
 		return
@@ -227,8 +227,9 @@ type tray struct {
 	// title and tooltip state
 	title, tooltipTitle string
 
-	menu  *menuLayout
-	props *prop.Properties
+	menu             *menuLayout
+	props, menuProps *prop.Properties
+	menuVersion      uint32
 }
 
 func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
