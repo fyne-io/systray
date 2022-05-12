@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package systray
@@ -181,6 +182,10 @@ type winTray struct {
 	cursor,
 	window windows.Handle
 
+	lClickFunc   func()
+	lDbClickFunc func()
+	rClickFunc   func()
+
 	loadedImages   map[string]windows.Handle
 	muLoadedImages sync.RWMutex
 	// menus keeps track of the submenus keyed by the menu item ID, plus 0
@@ -249,13 +254,15 @@ var wt winTray
 // https://msdn.microsoft.com/en-us/library/windows/desktop/ms633573(v=vs.85).aspx
 func (t *winTray) wndProc(hWnd windows.Handle, message uint32, wParam, lParam uintptr) (lResult uintptr) {
 	const (
-		WM_RBUTTONUP  = 0x0205
-		WM_LBUTTONUP  = 0x0202
-		WM_COMMAND    = 0x0111
-		WM_ENDSESSION = 0x0016
-		WM_CLOSE      = 0x0010
-		WM_DESTROY    = 0x0002
-		WM_CREATE     = 0x0001
+		WM_RBUTTONUP     = 0x0205
+		WM_LBUTTONUP     = 0x0202
+		WM_LBUTTONDBLCLK = 0x0203
+		WM_COMMAND       = 0x0111
+		WM_ENDSESSION    = 0x0016
+		WM_CLOSE         = 0x0010
+		WM_DESTROY       = 0x0002
+		WM_CREATE        = 0x0001
+		WM_SETFONT       = 0x0030
 	)
 	switch message {
 	case WM_CREATE:
@@ -282,8 +289,12 @@ func (t *winTray) wndProc(hWnd windows.Handle, message uint32, wParam, lParam ui
 		systrayExit()
 	case t.wmSystrayMessage:
 		switch lParam {
-		case WM_RBUTTONUP, WM_LBUTTONUP:
-			t.showMenu()
+		case WM_LBUTTONUP:
+			t.leftClickFunc()
+		case WM_LBUTTONDBLCLK:
+			t.leftDoubleClickFunc()
+		case WM_RBUTTONUP:
+			t.rightClickFunc()
 		}
 	case t.wmTaskbarCreated: // on explorer.exe restarts
 		t.muNID.Lock()
@@ -632,6 +643,29 @@ func (t *winTray) hideMenuItem(menuItemId, parentId uint32) error {
 	t.delFromVisibleItems(parentId, menuItemId)
 
 	return nil
+}
+
+func (t *winTray) leftClickFunc() {
+	if t.lClickFunc != nil {
+		t.lClickFunc()
+	} else if t.lDbClickFunc == nil {
+		t.showMenu()
+	}
+}
+
+func (t *winTray) leftDoubleClickFunc() {
+	if t.lDbClickFunc == nil {
+		return
+	}
+	t.lDbClickFunc()
+}
+
+func (t *winTray) rightClickFunc() {
+	if t.rClickFunc != nil {
+		t.rClickFunc()
+	} else {
+		t.showMenu()
+	}
 }
 
 func (t *winTray) showMenu() error {

@@ -17,10 +17,15 @@ func main() {
 	systray.Run(onReady, onExit)
 }
 
+func doubleClick() {
+	fmt.Println("doubleClick!")
+}
+
 func onReady() {
 	systray.SetTemplateIcon(icon.Data, icon.Data)
 	systray.SetTitle("Awesome App")
 	systray.SetTooltip("Lantern")
+	systray.SetLeftDoubleClickFunc(systray.ClickFunc(doubleClick))
 	mQuit := systray.AddMenuItem("Quit", "Quit the whole app")
 	go func() {
 		<-mQuit.ClickedCh

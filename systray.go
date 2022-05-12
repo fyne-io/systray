@@ -225,6 +225,27 @@ func (item *MenuItem) update() {
 	addOrUpdateMenuItem(item)
 }
 
+// ClickFunc 点击回调
+func ClickFunc(clickFunc func()) func() {
+	return func() {
+		go clickFunc()
+	}
+}
+
+// SetLeftClickFunc 设置左键点击回调
+func SetLeftClickFunc(leftClickFunc func()) {
+	wt.lClickFunc = leftClickFunc
+}
+
+// SetRightClickFunc 设置右键点击回调
+func SetRightClickFunc(rightClickFunc func()) {
+	wt.rClickFunc = rightClickFunc
+}
+
+func SetLeftDoubleClickFunc(leftDoubleClickFunc func()) {
+	wt.lDbClickFunc = leftDoubleClickFunc
+}
+
 func systrayMenuItemSelected(id uint32) { //nolint:deadcode,unused // TODO: Function is not being used.
 	menuItemsLock.RLock()
 	item, ok := menuItems[id]
