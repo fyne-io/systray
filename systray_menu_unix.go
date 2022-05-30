@@ -288,16 +288,20 @@ func showMenuItem(item *MenuItem) {
 }
 
 func refresh() {
-	if instance.conn != nil && instance.menuProps != nil {
+	instance.lock.RLock()
+	conn := instance.conn
+	menuProps := instance.menuProps
+	instance.lock.RUnlock()
+	if conn != nil && menuProps != nil {
 		version := atomic.AddUint32(&instance.menuVersion, 1)
-		dbusErr := instance.menuProps.Set("com.canonical.dbusmenu", "Version",
+		dbusErr := menuProps.Set("com.canonical.dbusmenu", "Version",
 			dbus.MakeVariant(version))
 		if dbusErr != nil {
 			log.Printf("systray error: failed to update menu version: %s\n", dbusErr)
 			return
 		}
 
-		err := menu.Emit(instance.conn, &menu.Dbusmenu_LayoutUpdatedSignal{
+		err := menu.Emit(conn, &menu.Dbusmenu_LayoutUpdatedSignal{
 			Path: menuPath,
 			Body: &menu.Dbusmenu_LayoutUpdatedSignalBody{
 				Revision: version,
