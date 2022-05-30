@@ -69,6 +69,7 @@ func onReady() {
 			select {
 			case <-mChange.ClickedCh:
 				mChange.SetTitle("I've Changed")
+				systray.SetTemplateIcon(icon.Data1, icon.Data1)
 			case <-mChecked.ClickedCh:
 				if mChecked.Checked() {
 					mChecked.Uncheck()

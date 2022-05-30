@@ -15,6 +15,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
@@ -234,19 +235,15 @@ func nativeStart() {
 
 // tray is a basic type that handles the dbus functionality
 type tray struct {
-	// the DBus connection that we will use
-	conn *dbus.Conn
-
-	// icon data for the main systray icon
-	iconData []byte
-	// title and tooltip state
-	title, tooltipTitle string
-
-	lock             sync.RWMutex
-	menu             *menuLayout
-	menuLock         sync.RWMutex
-	props, menuProps *prop.Properties
-	menuVersion      uint32
+	lock                sync.RWMutex // lock for access to structure fields
+	conn                *dbus.Conn   // the DBus connection that we will use
+	iconData            []byte       // icon data for the main systray icon
+	title, tooltipTitle string       // title and tooltip state
+	props, menuProps    *prop.Properties
+	menu                *menuLayout
+	menuLock            sync.RWMutex
+	menuVersion         uint32
+	menuNextUpdate      time.Time
 }
 
 func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
@@ -347,8 +344,9 @@ func convertToPixels(data []byte) PX {
 	}
 
 	return PX{
-		img.Bounds().Dx(), img.Bounds().Dy(),
-		argbForImage(img),
+		W:   img.Bounds().Dx(),
+		H:   img.Bounds().Dy(),
+		Pix: argbForImage(img),
 	}
 }
 

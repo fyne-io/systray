@@ -6,6 +6,7 @@ package systray
 import (
 	"log"
 	"sync/atomic"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
@@ -44,7 +45,7 @@ func (t *tray) GetLayout(parentID int32, recursionDepth int32, propertyNames []s
 		instance.menuLock.RLock()
 		defer instance.menuLock.RUnlock()
 		// return copy of menu layout to prevent panic from cuncurrent access to layout
-		return atomic.LoadUint32(&instance.menuVersion), *copyLayout(m, recursionDepth), nil
+		return instance.menuVersion, *copyLayout(m, recursionDepth), nil
 	}
 	return
 }
@@ -202,9 +203,7 @@ func addOrUpdateMenuItem(item *MenuItem) {
 	}
 
 	applyItemToLayout(item, layout)
-	if exists {
-		refresh()
-	}
+	refresh()
 }
 
 func addSeparator(id uint32) {
@@ -223,7 +222,6 @@ func addSeparator(id uint32) {
 func applyItemToLayout(in *MenuItem, out *menuLayout) {
 	instance.menuLock.Lock()
 	defer instance.menuLock.Unlock()
-	out.V1["type"] = dbus.MakeVariant("standard")
 	out.V1["enabled"] = dbus.MakeVariant(!in.disabled)
 	out.V1["label"] = dbus.MakeVariant(in.title)
 
@@ -287,28 +285,46 @@ func showMenuItem(item *MenuItem) {
 	}
 }
 
+var refreshTimer *time.Timer
+
+const refreshDelay = 100 * time.Millisecond // refresh not often than 10 times per second
+
 func refresh() {
 	instance.lock.RLock()
 	conn := instance.conn
 	menuProps := instance.menuProps
 	instance.lock.RUnlock()
-	if conn != nil && menuProps != nil {
-		version := atomic.AddUint32(&instance.menuVersion, 1)
+	if conn == nil || menuProps == nil {
+		return
+	}
+	instance.menuLock.Lock()
+	defer instance.menuLock.Unlock()
+	if refreshTimer != nil {
+		if instance.menuNextUpdate.Before(time.Now()) {
+			refreshTimer.Reset(refreshDelay) // reset will schedule new run
+			instance.menuNextUpdate = time.Now().Add(refreshDelay)
+		}
+		return // do nothing when refresh is already scheduled
+	}
+	instance.menuNextUpdate = time.Now().Add(refreshDelay)
+	refreshTimer = time.AfterFunc(refreshDelay, func() {
+		instance.menuLock.Lock()
+		defer instance.menuLock.Unlock()
+		instance.menuVersion++
 		dbusErr := menuProps.Set("com.canonical.dbusmenu", "Version",
-			dbus.MakeVariant(version))
+			dbus.MakeVariant(instance.menuVersion))
 		if dbusErr != nil {
 			log.Printf("systray error: failed to update menu version: %s\n", dbusErr)
 			return
 		}
-
 		err := menu.Emit(conn, &menu.Dbusmenu_LayoutUpdatedSignal{
 			Path: menuPath,
 			Body: &menu.Dbusmenu_LayoutUpdatedSignalBody{
-				Revision: version,
+				Revision: instance.menuVersion,
 			},
 		})
 		if err != nil {
 			log.Printf("systray error: failed to emit layout updated signal: %s\n", err)
 		}
-	}
+	})
 }
