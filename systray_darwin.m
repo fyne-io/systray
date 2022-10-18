@@ -1,3 +1,5 @@
+#define NS_FORMAT_ARGUMENT(A)
+
 #import <Cocoa/Cocoa.h>
 #include "systray.h"
 
