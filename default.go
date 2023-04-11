@@ -2,7 +2,6 @@ package systray
 
 import (
 	"sync"
-	"sync/atomic"
 )
 
 var (
@@ -111,5 +110,5 @@ func AddMenuItemCheckbox(title string, tooltip string, checked bool) *MenuItem {
 func AddSeparator() {
 	initDefaultIcon()
 
-	defaultIcon.addSeparator(atomic.AddUint32(&currentID, 1), 0)
+	defaultIcon.addSeparator(0)
 }

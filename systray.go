@@ -4,6 +4,7 @@ package systray
 import (
 	"log"
 	"sync"
+	"sync/atomic"
 )
 
 type Icon struct {
@@ -22,6 +23,10 @@ func NewIcon() (*Icon, error) {
 	return &Icon{
 		native: native,
 	}, nil
+}
+
+func (icon *Icon) nextID() uint32 {
+	return atomic.AddUint32(&icon.id, 1)
 }
 
 // This helper function allows us to call systrayExit only once,

@@ -2,7 +2,6 @@ package systray
 
 import (
 	"fmt"
-	"sync/atomic"
 )
 
 // MenuItem is used to keep track each menu item of systray.
@@ -23,6 +22,8 @@ type MenuItem struct {
 	checked bool
 	// has the menu item a checkbox (Linux)
 	isCheckable bool
+	// icon is the icon that the item was created from
+	icon *Icon
 	// parent item, for sub menus
 	parent *MenuItem
 }
@@ -35,29 +36,30 @@ func (item *MenuItem) String() string {
 }
 
 // newMenuItem returns a populated MenuItem object
-func newMenuItem(title string, tooltip string, parent *MenuItem) *MenuItem {
+func (icon *Icon) newMenuItem(title string, tooltip string, parent *MenuItem) *MenuItem {
 	return &MenuItem{
 		ClickedCh:   make(chan struct{}),
-		id:          atomic.AddUint32(&currentID, 1),
+		id:          icon.nextID(),
 		title:       title,
 		tooltip:     tooltip,
 		disabled:    false,
 		checked:     false,
 		isCheckable: false,
+		icon:        icon,
 		parent:      parent,
 	}
 }
 
 // AddSeparator adds a separator bar to the submenu
 func (item *MenuItem) AddSeparator() {
-	addSeparator(atomic.AddUint32(&currentID, 1), item.id)
+	item.icon.addSeparator(item.id)
 }
 
 // AddSubMenuItem adds a nested sub-menu item with the designated title and tooltip.
 // It can be safely invoked from different goroutines.
 // Created menu items are checkable on Windows and OSX by default. For Linux you have to use AddSubMenuItemCheckbox
 func (item *MenuItem) AddSubMenuItem(title string, tooltip string) *MenuItem {
-	child := newMenuItem(title, tooltip, item)
+	child := item.icon.newMenuItem(title, tooltip, item)
 	child.update()
 	return child
 }
@@ -66,7 +68,7 @@ func (item *MenuItem) AddSubMenuItem(title string, tooltip string) *MenuItem {
 // It can be safely invoked from different goroutines.
 // On Windows and OSX this is the same as calling AddSubMenuItem
 func (item *MenuItem) AddSubMenuItemCheckbox(title string, tooltip string, checked bool) *MenuItem {
-	child := newMenuItem(title, tooltip, item)
+	child := item.icon.newMenuItem(title, tooltip, item)
 	child.isCheckable = true
 	child.checked = checked
 	child.update()
@@ -110,6 +112,7 @@ func (item *MenuItem) Hide() {
 // Remove removes a menu item
 func (item *MenuItem) Remove() {
 	removeMenuItem(item)
+
 	menuItemsLock.Lock()
 	delete(menuItems, item.id)
 	menuItemsLock.Unlock()
