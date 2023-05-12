@@ -60,12 +60,8 @@ func SetIcon(iconBytes []byte) {
 		return
 	}
 
-	dbusErr := props.Set("org.kde.StatusNotifierItem", "IconPixmap",
-		dbus.MakeVariant([]PX{convertToPixels(iconBytes)}))
-	if dbusErr != nil {
-		log.Printf("systray error: failed to set IconPixmap prop: %s\n", dbusErr)
-		return
-	}
+	props.SetMust("org.kde.StatusNotifierItem", "IconPixmap",
+		[]PX{convertToPixels(iconBytes)})
 	if conn == nil {
 		return
 	}
