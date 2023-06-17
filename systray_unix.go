@@ -269,7 +269,7 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 				Callback: nil,
 			},
 			"Id": {
-				Value:    "1",
+				Value:    t.title,
 				Writable: false,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
