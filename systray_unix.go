@@ -298,7 +298,11 @@ type tray struct {
 
 func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 	t.lock.Lock()
-	t.lock.Unlock()
+	defer t.lock.Unlock()
+	id := t.title
+	if id == "" {
+		id = fmt.Sprintf("systray_%d", os.Getpid())
+	}
 	return map[string]map[string]*prop.Prop{
 		"org.kde.StatusNotifierItem": {
 			"Status": {
@@ -314,7 +318,7 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 				Callback: nil,
 			},
 			"Id": {
-				Value:    t.title,
+				Value:    id,
 				Writable: false,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
