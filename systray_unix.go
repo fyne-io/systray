@@ -29,13 +29,14 @@ const (
 	menuPath = "/StatusNotifierMenu"
 )
 
-var (
-	// to signal quitting the internal main loop
-	quitChan = make(chan struct{})
+type nativeIcon struct {
+	quit     chan struct{}
+	instance *tray
+}
 
-	// instance is the current instance of our DBus tray server
-	instance = &tray{menu: &menuLayout{}, menuVersion: 1}
-)
+func newNativeIcon() (*nativeIcon, error) {
+	panic("Not implemented.")
+}
 
 // SetTemplateIcon sets the systray icon as a template icon (on macOS), falling back
 // to a regular icon on other platforms.
