@@ -145,8 +145,8 @@ func AddMenuItem(title string, tooltip string) *MenuItem {
 }
 
 // AddMenuItemCheckbox adds a menu item with the designated title and tooltip and a checkbox for Linux.
+// On other platforms there will be a check indicated next to the item if `checked` is true.
 // It can be safely invoked from different goroutines.
-// On Windows and OSX this is the same as calling AddMenuItem
 func AddMenuItemCheckbox(title string, tooltip string, checked bool) *MenuItem {
 	item := newMenuItem(title, tooltip, nil)
 	item.isCheckable = true
