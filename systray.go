@@ -127,6 +127,14 @@ func Register(onReady func(), onExit func()) {
 
 // ResetMenu will remove all menu items
 func ResetMenu() {
+	menuItemsLock.Lock()
+	id := currentID.Load()
+	menuItemsLock.Unlock()
+	for i, item := range menuItems {
+		if i < id {
+			item.Remove()
+		}
+	}
 	resetMenu()
 }
 
@@ -224,6 +232,11 @@ func (item *MenuItem) Remove() {
 	removeMenuItem(item)
 	menuItemsLock.Lock()
 	delete(menuItems, item.id)
+	select {
+	case <-item.ClickedCh:
+	default:
+	}
+	close(item.ClickedCh)
 	menuItemsLock.Unlock()
 }
 
@@ -252,6 +265,13 @@ func (item *MenuItem) Uncheck() {
 // update propagates changes on a menu item to systray
 func (item *MenuItem) update() {
 	menuItemsLock.Lock()
+	if v, ok := menuItems[item.id]; ok {
+		select {
+		case <-v.ClickedCh:
+		default:
+		}
+		close(v.ClickedCh)
+	}
 	menuItems[item.id] = item
 	menuItemsLock.Unlock()
 	addOrUpdateMenuItem(item)
