@@ -15,6 +15,7 @@ func main() {
 	}
 
 	systray.Run(onReady, onExit)
+	fmt.Println("Finished quitting")
 }
 
 func addQuitItem() {
@@ -24,7 +25,6 @@ func addQuitItem() {
 		<-mQuit.ClickedCh
 		fmt.Println("Requesting quit")
 		systray.Quit()
-		fmt.Println("Finished quitting")
 	}()
 	systray.AddSeparator()
 }
