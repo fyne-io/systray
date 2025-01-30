@@ -3,7 +3,9 @@
 package systray
 
 import (
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
@@ -21,6 +23,17 @@ func (item *MenuItem) SetIcon(iconBytes []byte) {
 		m.V1["icon-data"] = dbus.MakeVariant(iconBytes)
 		refresh()
 	}
+}
+
+// SetIconFromFilePath sets the icon of a menu item from a file path.
+// iconFilePath should be the path to a .ico for windows and .ico/.jpg/.png for other platforms.
+func (item *MenuItem) SetIconFromFilePath(iconFilePath string) error {
+	iconBytes, err := os.ReadFile(iconFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read icon file: %v", err)
+	}
+	item.SetIcon(iconBytes)
+	return nil
 }
 
 // copyLayout makes full copy of layout

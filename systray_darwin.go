@@ -14,6 +14,7 @@ void setInternalLoop(bool);
 import "C"
 
 import (
+	"os"
 	"unsafe"
 )
 
@@ -78,6 +79,17 @@ func setInternalLoop(internal bool) {
 func SetIcon(iconBytes []byte) {
 	cstr := (*C.char)(unsafe.Pointer(&iconBytes[0]))
 	C.setIcon(cstr, (C.int)(len(iconBytes)), false)
+}
+
+// SetIconFromFilePath sets the systray icon from a file path.
+// iconFilePath should be the path to a .ico for windows and .ico/.jpg/.png for other platforms.
+func SetIconFromFilePath(iconFilePath string) error {
+	bytes, err := os.ReadFile(iconFilePath)
+	if err != nil {
+		return err
+	}
+	SetIcon(bytes)
+	return nil
 }
 
 // SetTitle sets the systray title, only available on Mac and Linux.
