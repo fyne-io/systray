@@ -81,11 +81,14 @@ func newMenuItem(title string, tooltip string, parent *MenuItem) *MenuItem {
 
 // Run initializes GUI and starts the event loop, then invokes the onReady
 // callback. It blocks until systray.Quit() is called.
-func Run(onReady, onExit func()) {
+func Run(onReady, onExit func()) error {
 	setInternalLoop(true)
-	Register(onReady, onExit)
-
+	err := Register(onReady, onExit)
+	if err != nil {
+		return err
+	}
 	nativeLoop()
+	return nil
 }
 
 // RunWithExternalLoop allows the systemtray module to operate with other tookits.
