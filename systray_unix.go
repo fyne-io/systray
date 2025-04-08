@@ -154,7 +154,8 @@ func setInternalLoop(_ bool) {
 	// nothing to action on Linux
 }
 
-func registerSystray() {
+func registerSystray() error {
+	return nil
 }
 
 func nativeLoop() int {

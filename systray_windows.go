@@ -394,6 +394,9 @@ func (t *winTray) initInstance() error {
 	res, _, err := pRegisterWindowMessage.Call(
 		uintptr(unsafe.Pointer(taskbarEventNamePtr)),
 	)
+	if res == 0 {
+		return err
+	}
 	t.wmTaskbarCreated = uint32(res)
 
 	t.loadedImages = make(map[string]windows.Handle)
@@ -892,19 +895,21 @@ func create32BitHBitmap(hDC uintptr, cx, cy int32) (uintptr, error) {
 	return hBitmap, nil
 }
 
-func registerSystray() {
+func registerSystray() error {
 	if err := wt.initInstance(); err != nil {
-		log.Printf("systray error: unable to init instance: %s\n", err)
-		return
+		err = fmt.Errorf("systray error: unable to init instance: %s\n", err)
+		// TODO Log this too?
+		return err
 	}
 
 	if err := wt.createMenu(); err != nil {
-		log.Printf("systray error: unable to create menu: %s\n", err)
-		return
+		err = fmt.Errorf("systray error: unable to create menu: %s\n", err)
+		return err
 	}
 
 	wt.initialized.Store(true)
 	systrayReady()
+	return nil
 }
 
 var m = &struct {

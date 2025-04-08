@@ -61,8 +61,9 @@ func SetRemovalAllowed(allowed bool) {
 	C.setRemovalAllowed((C.bool)(allowed))
 }
 
-func registerSystray() {
+func registerSystray() error {
 	C.registerSystray()
+	return nil
 }
 
 func nativeLoop() {
