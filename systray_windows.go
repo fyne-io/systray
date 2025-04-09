@@ -897,13 +897,14 @@ func create32BitHBitmap(hDC uintptr, cx, cy int32) (uintptr, error) {
 
 func registerSystray() error {
 	if err := wt.initInstance(); err != nil {
-		err = fmt.Errorf("systray error: unable to init instance: %s\n", err)
-		// TODO Log this too?
-		return err
+		err = fmt.Errorf("systray error: unable to init instance: %s", err)
+		log.Printf("%s\n", err)
+                return err
 	}
 
 	if err := wt.createMenu(); err != nil {
-		err = fmt.Errorf("systray error: unable to create menu: %s\n", err)
+		err = fmt.Errorf("systray error: unable to create menu: %s", err)
+                log.Printf("%s\n", err)
 		return err
 	}
 

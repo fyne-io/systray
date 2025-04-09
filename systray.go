@@ -106,7 +106,8 @@ func RunWithExternalLoop(onReady, onExit func()) (start, end func()) {
 // caller to run the event loop somewhere else. It's useful if the program
 // needs to show other UI elements, for example, webview.
 // To overcome some OS weirdness, On macOS versions before Catalina, calling
-// this does exactly the same as Run().
+// this does exactly the same as Run(). If an error is returned, initialization
+// failed and onReady/onExit will never be called
 func Register(onReady func(), onExit func()) error {
 	if onReady == nil {
 		systrayReady = func() {}
