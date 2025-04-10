@@ -80,7 +80,8 @@ func newMenuItem(title string, tooltip string, parent *MenuItem) *MenuItem {
 }
 
 // Run initializes GUI and starts the event loop, then invokes the onReady
-// callback. It blocks until systray.Quit() is called.
+// callback. It blocks until systray.Quit() is called. If an error us returned,
+// initialization failed and onReady/onExit will never be called
 func Run(onReady, onExit func()) error {
 	setInternalLoop(true)
 	err := Register(onReady, onExit)
