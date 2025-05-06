@@ -52,14 +52,33 @@ withParentMenuId: (int)theParentMenuId
 }
 @end
 
+@interface RightClickDetector : NSView
+
+@property (copy) void (^onRightClicked)(NSEvent *);
+
+@end
+
+@implementation RightClickDetector
+
+- (void)rightMouseUp:(NSEvent *)theEvent {
+  if (!self.onRightClicked) {
+    return;
+  }
+
+  self.onRightClicked(theEvent);
+}
+
+@end
+
+
 @interface SystrayAppDelegate: NSObject <NSApplicationDelegate, NSMenuDelegate>
   - (void) add_or_update_menu_item:(MenuItem*) item;
   - (IBAction)menuHandler:(id)sender;
   - (void)menuWillOpen:(NSMenu*)menu;
   @property (assign) IBOutlet NSWindow *window;
-  @end
+@end
 
-  @implementation SystrayAppDelegate
+@implementation SystrayAppDelegate
 {
   NSStatusItem *statusItem;
   NSMenu *menu;
@@ -75,13 +94,32 @@ withParentMenuId: (int)theParentMenuId
   self->menu = [[NSMenu alloc] init];
   self->menu.delegate = self;
   self->menu.autoenablesItems = FALSE;
-  self->statusItem.menu = self->menu;
   // Once the user has removed it, the item needs to be explicitly brought back,
   // even restarting the application is insufficient.
   // Since the interface from Go is relatively simple, for now we ensure it's
   // always visible at application startup.
   self->statusItem.visible = TRUE;
+
+  NSStatusBarButton *button = self->statusItem.button;
+  button.action = @selector(leftMouseClicked);
+
+  NSSize size = [button frame].size;
+  NSRect frame = CGRectMake(0, 0, size.width*2, size.height);
+  RightClickDetector *rightClicker = [[RightClickDetector alloc] initWithFrame:frame];
+  rightClicker.onRightClicked = ^(NSEvent *event) {
+    [self rightMouseClicked];
+  };
+  [button addSubview:rightClicker];
+
   systray_ready();
+}
+
+- (void)rightMouseClicked {
+  systray_right_click();
+}
+
+- (void)leftMouseClicked {
+  systray_left_click();
 }
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification
@@ -228,6 +266,13 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
     return;
   }
   menuItem.image = image;
+}
+
+- (void)show_menu
+{
+  [self->menu popUpMenuPositioningItem:nil
+                            atLocation:NSMakePoint(0, self->statusItem.button.bounds.size.height+6)
+                                inView:self->statusItem.button];
 }
 
 - (void) show_menu_item:(NSNumber*) menuId
@@ -384,6 +429,10 @@ void hide_menu_item(int menuId) {
 void remove_menu_item(int menuId) {
   NSNumber *mId = [NSNumber numberWithInt:menuId];
   runInMainThread(@selector(remove_menu_item:), (id)mId);
+}
+
+void show_menu() {
+  runInMainThread(@selector(show_menu), nil);
 }
 
 void show_menu_item(int menuId) {

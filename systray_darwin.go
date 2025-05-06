@@ -169,6 +169,20 @@ func resetMenu() {
 	C.reset_menu()
 }
 
+func ShowMenu() {
+	C.show_menu()
+}
+
+//export systray_left_click
+func systray_left_click() {
+	systrayLeftClick()
+}
+
+//export systray_right_click
+func systray_right_click() {
+	systrayRightClick()
+}
+
 //export systray_ready
 func systray_ready() {
 	systrayReady()

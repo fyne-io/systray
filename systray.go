@@ -10,11 +10,11 @@ import (
 )
 
 var (
-	systrayReady      func()
-	systrayExit       func()
-	systrayExitCalled bool
-	menuItems         = make(map[uint32]*MenuItem)
-	menuItemsLock     sync.RWMutex
+	systrayReady, systrayExit func()
+	tappedLeft, tappedRight   func()
+	systrayExitCalled         bool
+	menuItems                 = make(map[uint32]*MenuItem)
+	menuItemsLock             sync.RWMutex
 
 	currentID atomic.Uint32
 	quitOnce  sync.Once
@@ -144,6 +144,14 @@ func ResetMenu() {
 // Quit the systray
 func Quit() {
 	quitOnce.Do(quit)
+}
+
+func SetOnTapped(f func()) {
+	tappedLeft = f
+}
+
+func SetOnSecondaryTapped(f func()) {
+	tappedRight = f
 }
 
 // AddMenuItem adds a menu item with the designated title and tooltip.
@@ -297,4 +305,22 @@ func systrayMenuItemSelected(id uint32) {
 	// in case no one waiting for the channel
 	default:
 	}
+}
+
+func systrayLeftClick() {
+	if fn := tappedLeft; fn != nil {
+		fn()
+		return
+	}
+
+	ShowMenu()
+}
+
+func systrayRightClick() {
+	if fn := tappedRight; fn != nil {
+		fn()
+		return
+	}
+
+	ShowMenu()
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"fyne.io/systray"
@@ -34,6 +35,11 @@ func onReady() {
 	systray.SetTooltip("Lantern")
 	addQuitItem()
 	systray.AddSeparator()
+
+	systray.SetOnSecondaryTapped(func() {
+		log.Println("Custom right click!")
+		systray.ShowMenu()
+	})
 
 	// We can manipulate the systray in other goroutines
 	go func() {
