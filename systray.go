@@ -88,7 +88,7 @@ func Run(onReady, onExit func()) {
 	nativeLoop()
 }
 
-// RunWithExternalLoop allows the systemtray module to operate with other tookits.
+// RunWithExternalLoop allows the system tray module to operate with other toolkits.
 // The returned start and end functions should be called by the toolkit when the application has started and will end.
 func RunWithExternalLoop(onReady, onExit func()) (start, end func()) {
 	Register(onReady, onExit)
