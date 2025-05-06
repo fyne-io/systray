@@ -326,13 +326,10 @@ func (t *winTray) wndProc(hWnd windows.Handle, message uint32, wParam, lParam ui
 		runSystrayExit()
 	case t.wmSystrayMessage:
 		switch lParam {
-		case WM_RBUTTONUP, WM_LBUTTONUP:
-			select {
-			case TrayOpenedCh <- struct{}{}:
-			default:
-			}
-
-			t.showMenu()
+		case WM_LBUTTONUP:
+			systrayLeftClick()
+		case WM_RBUTTONUP:
+			systrayRightClick()
 		}
 	case t.wmTaskbarCreated: // on explorer.exe restarts
 		t.muNID.Lock()
@@ -1076,6 +1073,10 @@ func SetTooltip(tooltip string) {
 		log.Printf("systray error: unable to set tooltip: %s\n", err)
 		return
 	}
+}
+
+func ShowMenu() {
+	wt.showMenu()
 }
 
 func addOrUpdateMenuItem(item *MenuItem) {
