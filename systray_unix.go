@@ -365,7 +365,7 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 				Callback: nil,
 			},
 			"ItemIsMenu": {
-				Value:    true,
+				Value:    tappedLeft == nil && tappedRight == nil,
 				Writable: false,
 				Emit:     prop.EmitTrue,
 				Callback: nil,

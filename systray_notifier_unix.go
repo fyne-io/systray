@@ -13,15 +13,28 @@ func newLeftRightNotifierItem() notifier.StatusNotifierItemer {
 }
 
 func (i *leftRightNotifierItem) Activate(_, _ int32) *dbus.Error {
+	if f := tappedLeft; f == nil {
+		return &dbus.ErrMsgUnknownMethod
+	}
+
 	systrayLeftClick()
 	return nil
 }
 
 func (i *leftRightNotifierItem) ContextMenu(_, _ int32) *dbus.Error {
-	return &dbus.ErrMsgUnknownMethod
+	if f := tappedRight; f == nil {
+		return &dbus.ErrMsgUnknownMethod
+	}
+
+	systrayRightClick()
+	return nil
 }
 
 func (i *leftRightNotifierItem) SecondaryActivate(_, _ int32) *dbus.Error {
+	if f := tappedRight; f == nil {
+		return &dbus.ErrMsgUnknownMethod
+	}
+
 	systrayRightClick()
 	return nil
 }
