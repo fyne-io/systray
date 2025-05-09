@@ -171,12 +171,22 @@ func resetMenu() {
 
 //export systray_left_click
 func systray_left_click() {
-	systrayLeftClick()
+	if fn := tappedLeft; fn != nil {
+		fn()
+		return
+	}
+
+	C.show_menu()
 }
 
 //export systray_right_click
 func systray_right_click() {
-	systrayRightClick()
+	if fn := tappedRight; fn != nil {
+		fn()
+		return
+	}
+
+	C.show_menu()
 }
 
 //export systray_ready

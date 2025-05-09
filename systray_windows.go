@@ -1127,3 +1127,21 @@ func resetMenu() {
 	wt.menuItemIcons = make(map[uint32]windows.Handle)
 	wt.createMenu()
 }
+
+func systrayLeftClick() {
+	if fn := tappedLeft; fn != nil {
+		fn()
+		return
+	}
+
+	wt.showMenu()
+}
+
+func systrayRightClick() {
+	if fn := tappedRight; fn != nil {
+		fn()
+		return
+	}
+
+	wt.showMenu()
+}

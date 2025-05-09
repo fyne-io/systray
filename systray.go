@@ -306,21 +306,3 @@ func systrayMenuItemSelected(id uint32) {
 	default:
 	}
 }
-
-func systrayLeftClick() {
-	if fn := tappedLeft; fn != nil {
-		fn()
-		return
-	}
-
-	ShowMenu()
-}
-
-func systrayRightClick() {
-	if fn := tappedRight; fn != nil {
-		fn()
-		return
-	}
-
-	ShowMenu()
-}

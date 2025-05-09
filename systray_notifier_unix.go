@@ -17,7 +17,7 @@ func (i *leftRightNotifierItem) Activate(_, _ int32) *dbus.Error {
 		return &dbus.ErrMsgUnknownMethod
 	}
 
-	systrayLeftClick()
+	tappedLeft()
 	return nil
 }
 
@@ -26,7 +26,7 @@ func (i *leftRightNotifierItem) ContextMenu(_, _ int32) *dbus.Error {
 		return &dbus.ErrMsgUnknownMethod
 	}
 
-	systrayRightClick()
+	tappedRight()
 	return nil
 }
 
@@ -35,7 +35,7 @@ func (i *leftRightNotifierItem) SecondaryActivate(_, _ int32) *dbus.Error {
 		return &dbus.ErrMsgUnknownMethod
 	}
 
-	systrayRightClick()
+	tappedRight()
 	return nil
 }
 
