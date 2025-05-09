@@ -169,10 +169,6 @@ func resetMenu() {
 	C.reset_menu()
 }
 
-func ShowMenu() {
-	C.show_menu()
-}
-
 //export systray_left_click
 func systray_left_click() {
 	systrayLeftClick()

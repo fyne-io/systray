@@ -1075,10 +1075,6 @@ func SetTooltip(tooltip string) {
 	}
 }
 
-func ShowMenu() {
-	wt.showMenu()
-}
-
 func addOrUpdateMenuItem(item *MenuItem) {
 	err := wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.disabled, item.checked)
 	if err != nil {

@@ -38,7 +38,6 @@ func onReady() {
 
 	systray.SetOnSecondaryTapped(func() {
 		log.Println("Custom right click!")
-		systray.ShowMenu()
 	})
 
 	// We can manipulate the systray in other goroutines
