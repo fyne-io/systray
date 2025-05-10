@@ -115,11 +115,15 @@ withParentMenuId: (int)theParentMenuId
   }];
 
   NSSize size = [button frame].size;
-  NSRect frame = CGRectMake(0, 0, size.width*2, size.height);
+  NSRect frame = CGRectMake(0, 0, size.width, size.height);
   RightClickDetector *rightClicker = [[RightClickDetector alloc] initWithFrame:frame];
   rightClicker.onRightClicked = ^(NSEvent *event) {
     [self rightMouseClicked];
   };
+
+  rightClicker.autoresizingMask = (NSViewWidthSizable |
+                                   NSViewHeightSizable);
+  button.autoresizesSubviews = YES;
   [button addSubview:rightClicker];
 
   systray_ready();
