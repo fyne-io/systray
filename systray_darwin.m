@@ -103,6 +103,17 @@ withParentMenuId: (int)theParentMenuId
   NSStatusBarButton *button = self->statusItem.button;
   button.action = @selector(leftMouseClicked);
 
+  [NSEvent addLocalMonitorForEventsMatchingMask: (NSEventTypeLeftMouseDown|NSEventTypeRightMouseDown)
+                                        handler: ^NSEvent *(NSEvent *event) {
+    if (event.window != self->statusItem.button.window) {
+      return event;
+    }
+
+    [self leftMouseClicked];
+
+    return nil;
+  }];
+
   NSSize size = [button frame].size;
   NSRect frame = CGRectMake(0, 0, size.width*2, size.height);
   RightClickDetector *rightClicker = [[RightClickDetector alloc] initWithFrame:frame];
