@@ -59,6 +59,7 @@ func copyLayout(in *menuLayout, depth int32) *menuLayout {
 
 // GetLayout is com.canonical.dbusmenu.GetLayout method.
 func (t *tray) GetLayout(parentID int32, recursionDepth int32, propertyNames []string) (revision uint32, layout menuLayout, err *dbus.Error) {
+	initialMenuBuilt.Wait()
 	instance.menuLock.Lock()
 	defer instance.menuLock.Unlock()
 	if m, ok := findLayout(parentID); ok {
@@ -336,6 +337,8 @@ func showMenuItem(item *MenuItem) {
 }
 
 func refresh() {
+	instance.lock.Lock()
+	defer instance.lock.Unlock()
 	if instance.conn == nil || instance.menuProps == nil {
 		return
 	}
