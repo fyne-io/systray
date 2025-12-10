@@ -135,9 +135,13 @@ func Register(onReady func(), onExit func()) {
 func ResetMenu() {
 	menuItemsLock.Lock()
 	id := currentID.Load()
+	items := make([]*MenuItem, 0, len(menuItems))
+	for _, item := range menuItems {
+		items = append(items, item)
+	}
 	menuItemsLock.Unlock()
-	for i, item := range menuItems {
-		if i < id && item.parent == nil {
+	for _, item := range items {
+		if item.id <= id && item.parent == nil {
 			item.Remove()
 		}
 	}
