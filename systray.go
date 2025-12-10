@@ -68,7 +68,7 @@ func (item *MenuItem) String() string {
 
 // newMenuItem returns a populated MenuItem object
 func newMenuItem(title string, tooltip string, parent *MenuItem) *MenuItem {
-	return &MenuItem{
+	item := &MenuItem{
 		ClickedCh:   make(chan struct{}),
 		id:          currentID.Add(1),
 		title:       title,
@@ -78,6 +78,12 @@ func newMenuItem(title string, tooltip string, parent *MenuItem) *MenuItem {
 		isCheckable: false,
 		parent:      parent,
 	}
+
+	menuItemsLock.Lock()
+	menuItems[item.id] = item
+	menuItemsLock.Unlock()
+
+	return item
 }
 
 // Run initializes GUI and starts the event loop, then invokes the onReady
@@ -294,8 +300,12 @@ func (item *MenuItem) Uncheck() {
 // update propagates changes on a menu item to systray
 func (item *MenuItem) update() {
 	menuItemsLock.Lock()
-	menuItems[item.id] = item
+	_, exists := menuItems[item.id]
 	menuItemsLock.Unlock()
+
+	if !exists {
+		return
+	}
 	addOrUpdateMenuItem(item)
 }
 
