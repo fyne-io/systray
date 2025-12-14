@@ -1,8 +1,11 @@
 package mock
 
 import (
+	"bytes"
 	"fmt"
+	"image"
 	"log"
+	"sync"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -10,24 +13,101 @@ import (
 type StatusNotifierItem struct {
 	Service    string
 	Sender     dbus.Sender
-	Properties ItemProperties
+	Properties *ItemProperties
+}
+
+func newStatusNotifierItem(service string, sender dbus.Sender) *StatusNotifierItem {
+	return &StatusNotifierItem{
+		Service:    service,
+		Sender:     sender,
+		Properties: newItemProperties(),
+	}
+}
+
+type Property[T any] struct {
+	mu        sync.Mutex
+	value     T
+	ChangedCh chan T
+}
+
+func newProperty[T any](initial T) *Property[T] {
+	return &Property[T]{
+		mu:        sync.Mutex{},
+		value:     initial,
+		ChangedCh: make(chan T),
+	}
+}
+
+func (p *Property[T]) Get() T {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.value
+}
+
+func (p *Property[T]) Set(newValue T) {
+	p.mu.Lock()
+	p.value = newValue
+	p.mu.Unlock()
+	sendNonBlockingToCh(p.ChangedCh, newValue)
 }
 
 type ItemProperties struct {
 	Id            string
 	ItemIsMenu    bool
-	Title         string
-	IconThemePath string
-	IconPixmap    []IconPixmap
-	Category      string
-	Status        string
-	ToolTip       ToolTip
+	Title         *Property[string]
+	IconThemePath *Property[string]
+	IconPixmap    *Property[[]IconPixmap]
+	Category      *Property[string]
+	Status        *Property[string]
+	ToolTip       *Property[ToolTip]
+}
+
+func newItemProperties() *ItemProperties {
+	return &ItemProperties{
+		Title:         newProperty(""),
+		IconThemePath: newProperty(""),
+		IconPixmap:    newProperty([]IconPixmap{}),
+		Category:      newProperty(""),
+		Status:        newProperty(""),
+		ToolTip:       newProperty(ToolTip{}),
+	}
 }
 
 type IconPixmap struct {
 	Width  int32
 	Height int32
 	Data   []byte
+}
+
+func IconPixmapFromData(data []byte) IconPixmap {
+	if len(data) == 0 {
+		return IconPixmap{}
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		log.Panicf("Failed to read icon format %v", err)
+	}
+
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	d := make([]byte, w*h*4)
+	i := 0
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			d[i] = byte(a)
+			d[i+1] = byte(r)
+			d[i+2] = byte(g)
+			d[i+3] = byte(b)
+			i += 4
+		}
+	}
+
+	return IconPixmap{
+		Width:  int32(img.Bounds().Dx()),
+		Height: int32(img.Bounds().Dy()),
+		Data:   d,
+	}
 }
 
 type ToolTip struct {
@@ -37,16 +117,16 @@ type ToolTip struct {
 	SubTitle string
 }
 
-func NewItemProperties(id string, isMenu bool, title string, iconThemePath string, iconPixmap []IconPixmap, category string, status string, tooltip ToolTip) ItemProperties {
+func NewItemProperties(id string, isMenu bool, title string, iconThemePath string, iconPixmap IconPixmap, category string, status string, tooltip ToolTip) ItemProperties {
 	return ItemProperties{
 		Id:            id,
 		ItemIsMenu:    isMenu,
-		Title:         title,
-		IconThemePath: iconThemePath,
-		IconPixmap:    iconPixmap,
-		Category:      category,
-		Status:        status,
-		ToolTip:       tooltip,
+		Title:         newProperty(title),
+		IconThemePath: newProperty(iconThemePath),
+		IconPixmap:    newProperty([]IconPixmap{iconPixmap}),
+		Category:      newProperty(category),
+		Status:        newProperty(status),
+		ToolTip:       newProperty(tooltip),
 	}
 }
 
@@ -124,30 +204,41 @@ func DecodeIconData(v dbus.Variant) ([]IconPixmap, error) {
 	return icons, nil
 }
 
-func ParseItemProperties(sender string, props map[string]dbus.Variant) (ItemProperties, error) {
-	log.Println("Fetched properties for sender:", sender)
-	for key, value := range props {
-		log.Printf("  %s: %v\n", key, value)
+func ParseItemProperties(itemProperties *ItemProperties, props map[string]dbus.Variant) error {
+	if v, ok := props["ToolTip"]; ok {
+		t, err := DecodeToolTip(v)
+		if err != nil {
+			return fmt.Errorf("failed to decode tooltip: %w", err)
+		}
+		itemProperties.ToolTip.Set(*t)
 	}
 
-	tooltip, err := DecodeToolTip(props["ToolTip"])
-	if err != nil {
-		return ItemProperties{}, fmt.Errorf("failed to decode tooltip: %w", err)
+	if v, ok := props["IconPixmap"]; ok {
+		data, err := DecodeIconData(v)
+		if err != nil {
+			return fmt.Errorf("failed to decode icon pixmap: %w", err)
+		}
+		itemProperties.IconPixmap.Set(data)
 	}
 
-	iconData, err := DecodeIconData(props["IconPixmap"])
-	if err != nil {
-		return ItemProperties{}, fmt.Errorf("failed to decode icon pixmap: %w", err)
+	if id, ok := props["Id"].Value().(string); ok {
+		itemProperties.Id = id
+	}
+	if isMenu, ok := props["ItemIsMenu"].Value().(bool); ok {
+		itemProperties.ItemIsMenu = isMenu
+	}
+	if title, ok := props["Title"].Value().(string); ok {
+		itemProperties.Title.Set(title)
+	}
+	if iconThemePath, ok := props["IconThemePath"].Value().(string); ok {
+		itemProperties.IconThemePath.Set(iconThemePath)
+	}
+	if category, ok := props["Category"].Value().(string); ok {
+		itemProperties.Category.Set(category)
+	}
+	if status, ok := props["Status"].Value().(string); ok {
+		itemProperties.Status.Set(status)
 	}
 
-	return NewItemProperties(
-		props["Id"].Value().(string),
-		props["ItemIsMenu"].Value().(bool),
-		props["Title"].Value().(string),
-		props["IconThemePath"].Value().(string),
-		iconData,
-		props["Category"].Value().(string),
-		props["Status"].Value().(string),
-		*tooltip,
-	), nil
+	return nil
 }

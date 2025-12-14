@@ -1,56 +1,65 @@
 //go:build (linux || freebsd || openbsd || netbsd) && !android
 
-package unix
+package systray
 
 import (
-	"fmt"
-	"sync"
+	"sync/atomic"
 	"testing"
-	"time"
 
 	"fyne.io/systray"
+	"fyne.io/systray/example/icon"
 	"fyne.io/systray/tests/unix/mock"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestInitWithMockDBus(t *testing.T) {
+func TestCheckSniProperties(t *testing.T) {
 	// Start a dedicated D-Bus daemon for this test
 	w := mock.NewStatusNotifierWatcher(t)
 	defer w.Close()
 
-	onExit := func() {
-		now := time.Now()
-		fmt.Println("Exit at", now.String())
-	}
-
-	var initialMenuBuilt sync.WaitGroup
-	initialMenuBuilt.Add(1)
-
-	title := "Awesome App"
+	onReadyCalled := atomic.Bool{}
 	onReady := func() {
-		systray.SetTitle(title)
-		systray.SetTooltip("Lantern")
-		mQuit := systray.AddMenuItem("Quit", "Quit the whole app")
-		go func() {
-			for range mQuit.ClickedCh {
-				fmt.Println("Requesting quit")
-				systray.Quit()
-			}
-		}()
-
-		initialMenuBuilt.Done()
+		onReadyCalled.Store(true)
 	}
+
+	onExitCalled := atomic.Bool{}
+	onExit := func() {
+		onExitCalled.Store(true)
+	}
+
+	title := "App Title"
+	systray.SetTitle(title)
+
+	tooltip := "Tooltip 棒棒嗒"
+	systray.SetTooltip(tooltip)
+	systray.SetTemplateIcon(icon.Data, icon.Data)
 
 	go systray.Run(onReady, onExit)
-	fmt.Println("Waiting for onReady")
-	initialMenuBuilt.Wait()
-	fmt.Println("On ready finished")
 
-	time.Sleep(10 * time.Millisecond)
+	// wait for the item to be registered
+	item := waitForChannel(t, w.ItemRegisteredCh)
+	assert.True(t, onReadyCalled.Load(), "onReady have been called")
 
-	item := w.Items()[0]
 	itemProperties := item.Properties
-	assert.Equal(t, title, itemProperties.Title)
+	assert.Equal(t, title, itemProperties.Title.Get())
+	assert.Equal(t, tooltip, itemProperties.ToolTip.Get().Title)
+	assert.Equal(t, mock.IconPixmapFromData(icon.Data), itemProperties.IconPixmap.Get()[0])
+
+	// check if updates are reflected
+	newTitle := "Title 2.0"
+	systray.SetTitle(newTitle)
+	waitForChannel(t, itemProperties.Title.ChangedCh)
+	assert.Equal(t, newTitle, itemProperties.Title.Get())
+
+	newTooltip := "New tooltip 🚀"
+	systray.SetTooltip(newTooltip)
+	waitForChannel(t, itemProperties.ToolTip.ChangedCh)
+	assert.Equal(t, newTooltip, itemProperties.ToolTip.Get().Title)
 
 	systray.Quit()
+
+	waitForChannel(t, w.ItemRemoveCh)
+	assert.True(t, onExitCalled.Load(), "onExit have been called")
+
+	w.Close()
 }

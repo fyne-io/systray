@@ -3,7 +3,6 @@ package mock
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -21,7 +20,7 @@ type DbusDaemon struct {
 
 func (d *DbusDaemon) Close() {
 	// Kill the daemon
-	if d.monitorCmd.Process != nil {
+	if d.monitorCmd != nil && d.monitorCmd.Process != nil {
 		d.monitorCmd.Process.Kill()
 		d.monitorCmd.Process.Wait()
 		d.monitorCmd = nil
@@ -29,8 +28,10 @@ func (d *DbusDaemon) Close() {
 	fmt.Println("D-Bus monitor stopped")
 
 	os.Unsetenv("DBUS_SESSION_BUS_ADDRESS")
-	d.cmd.Process.Kill()
-	d.cmd.Wait()
+	if d.cmd != nil && d.cmd.Process != nil {
+		d.cmd.Process.Kill()
+		d.cmd.Wait()
+	}
 }
 
 func startDbusDaemon(t *testing.T) *DbusDaemon {
@@ -58,10 +59,10 @@ func startDbusDaemon(t *testing.T) *DbusDaemon {
 	// set env so dbus.SessionBus() connects to it
 	os.Setenv("DBUS_SESSION_BUS_ADDRESS", addr)
 
-	monitorCmd := startBusMonitor(addr)
+	monitorCmd := startBusMonitor(t, addr)
 
 	// small pause for daemon to become ready (adjust if needed)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	return &DbusDaemon{
 		address:    addr,
@@ -70,22 +71,22 @@ func startDbusDaemon(t *testing.T) *DbusDaemon {
 	}
 }
 
-func startBusMonitor(address string) *exec.Cmd {
+func startBusMonitor(t *testing.T, address string) *exec.Cmd {
 	cmd := exec.Command("dbus-monitor", "--address", address)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	// Start the process BEFORE reading its output
 	if err := cmd.Start(); err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	go func() {
@@ -117,15 +118,12 @@ func startBusMonitor(address string) *exec.Cmd {
 	}()
 
 	go func() {
-		err := cmd.Wait()
-		if err != nil {
-			fmt.Println("process exited:", err)
-		} else {
-			fmt.Println("process exited normally")
+		if err := cmd.Wait(); err != nil {
+			fmt.Println("dbus-monitor exited with error:", err)
 		}
 	}()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	return cmd
 }

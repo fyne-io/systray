@@ -5,35 +5,72 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/godbus/dbus/v5"
 )
 
-var (
-	itemSignals = []string{
-		"NewIcon",
-		"NewAttentionIcon",
-		"NewOverlayIcon",
-		"NewToolTip",
-		"NewStatus",
-		"NewMenu",
+const ()
+
+type SignalInfo struct {
+	Interface string
+	Member    string
+	Path      string
+}
+
+func newSignalInfo(iface, member, path string) SignalInfo {
+	if !strings.HasPrefix(iface, "org.") {
+		panic("invalid interface name")
+	}
+	if path != "" && !strings.HasPrefix(path, "/") {
+		panic("invalid object path")
 	}
 
-	menuSignals = []string{
-		"LayoutUpdated",
-		"ItemActivationRequested",
-		"ItemsPropertiesUpdated",
+	return SignalInfo{
+		Interface: iface,
+		Member:    member,
+		Path:      path,
 	}
+}
+
+func (s SignalInfo) Name() string {
+	return fmt.Sprintf("%s.%s", s.Interface, s.Member)
+}
+
+var (
+	itemSignals = []SignalInfo{
+		// newSignalInfo("org.kde.StatusNotifierItem", "NewIcon", "/StatusNotifierItem"),
+		// newSignalInfo("org.kde.StatusNotifierItem", "NewAttentionIcon", "/StatusNotifierItem"),
+		// newSignalInfo("org.kde.StatusNotifierItem", "NewOverlayIcon", "/StatusNotifierItem"),
+		// newSignalInfo("org.kde.StatusNotifierItem", "NewToolTip", "/StatusNotifierItem"),
+		// newSignalInfo("org.kde.StatusNotifierItem", "NewStatus", "/StatusNotifierItem"),
+		newSignalInfo("org.kde.StatusNotifierItem", "NewMenu", "/StatusNotifierItem"),
+		// newSignalInfo("org.kde.StatusNotifierItem", "NewTitle", "/StatusNotifierItem"),
+		// newSignalInfo("org.kde.StatusNotifierItem", "NewIconThemePath", "/StatusNotifierItem"),
+	}
+
+	menuSignals = []SignalInfo{
+		newSignalInfo("org.kde.StatusNotifierMenu", "LayoutUpdated", "/StatusNotifierMenu"),
+		newSignalInfo("org.kde.StatusNotifierMenu", "ItemActivationRequested", "/StatusNotifierMenu"),
+		newSignalInfo("org.kde.StatusNotifierMenu", "ItemsPropertiesUpdated", "/StatusNotifierMenu"),
+	}
+
+	itemPropChangeSignal = newSignalInfo("org.freedesktop.DBus.Properties", "PropertiesChanged", "/StatusNotifierItem")
+	nameChangedSignal    = newSignalInfo("org.freedesktop.DBus", "NameOwnerChanged", "")
 )
 
 // StatusNotifierWatcher simulates the system tray daemon
 type StatusNotifierWatcher struct {
-	conn   *dbus.Conn
-	daemon *DbusDaemon
-	mu     sync.Mutex
-	items  map[dbus.Sender]StatusNotifierItem
+	ItemRegisteredCh chan *StatusNotifierItem
+	ItemRemoveCh     chan *StatusNotifierItem
+	CloseCh          chan struct{}
+	conn             *dbus.Conn
+	daemon           *DbusDaemon
+	mu               sync.Mutex
+	items            map[dbus.Sender]*StatusNotifierItem
+	signalsCh        chan *dbus.Signal
 }
 
 func NewStatusNotifierWatcher(t *testing.T) *StatusNotifierWatcher {
@@ -53,12 +90,15 @@ func NewStatusNotifierWatcher(t *testing.T) *StatusNotifierWatcher {
 	}
 
 	w := &StatusNotifierWatcher{
-		conn:   conn,
-		daemon: daemon,
-		items:  make(map[dbus.Sender]StatusNotifierItem),
+		ItemRegisteredCh: make(chan *StatusNotifierItem, 1),
+		ItemRemoveCh:     make(chan *StatusNotifierItem, 1),
+		CloseCh:          make(chan struct{}),
+		conn:             conn,
+		daemon:           daemon,
+		items:            make(map[dbus.Sender]*StatusNotifierItem),
+		signalsCh:        make(chan *dbus.Signal, 10),
 	}
 
-	// Setup signal handler to capture sender information
 	if err = conn.Export(w,
 		"/StatusNotifierWatcher",
 		"org.kde.StatusNotifierWatcher",
@@ -76,11 +116,13 @@ func NewStatusNotifierWatcher(t *testing.T) *StatusNotifierWatcher {
 	}
 
 	// Create signal channel
-	signals := make(chan *dbus.Signal, 10)
-	w.conn.Signal(signals)
+	w.conn.Signal(w.signalsCh)
 
 	// Start goroutine to handle dbus signals
-	go w.handleSignals(signals)
+	go w.handleSignals(w.signalsCh)
+
+	// register name change notifications
+	w.addOrRemoveSignal(true, "", nameChangedSignal)
 
 	fmt.Println("StatusNotifierWatcher service started")
 	return w
@@ -88,6 +130,16 @@ func NewStatusNotifierWatcher(t *testing.T) *StatusNotifierWatcher {
 
 // CleanupMockDBusWatcher releases the D-Bus name and closes the connection
 func (w *StatusNotifierWatcher) Close() {
+	if w.CloseCh == nil {
+		return
+	}
+	log.Println("Close channel")
+	w.conn.RemoveSignal(w.signalsCh)
+	close(w.signalsCh)
+
+	close(w.ItemRegisteredCh)
+	close(w.ItemRemoveCh)
+
 	if w.conn != nil {
 		w.conn.ReleaseName("org.kde.StatusNotifierWatcher")
 		w.conn.Close()
@@ -98,6 +150,9 @@ func (w *StatusNotifierWatcher) Close() {
 		w.daemon.Close()
 		w.daemon = nil
 	}
+
+	close(w.CloseCh)
+	w.CloseCh = nil
 }
 
 // ===================================================================
@@ -106,13 +161,14 @@ func (w *StatusNotifierWatcher) Close() {
 
 // org.kde.StatusNotifierWatcher.RegisterStatusNotifierItem
 func (w *StatusNotifierWatcher) RegisterStatusNotifierItem(sender dbus.Sender, service string) *dbus.Error {
-	senderName := string(sender)
-	log.Println("Register item:", service, "from sender:", senderName)
+	log.Println("Register item:", service, "from sender:", string(sender))
 
-	w.addSni(sender, service)
-	w.registerSignals(sender)
-
+	item := w.addSni(sender, service)
+	w.registerItemSignals(sender)
 	w.fetchItemProperties(sender)
+
+	w.ItemRegisteredCh <- item
+
 	return nil
 }
 
@@ -156,33 +212,42 @@ func (w *StatusNotifierWatcher) GetAll(iface string) (map[string]dbus.Variant, *
 	}, nil
 }
 
-func (w *StatusNotifierWatcher) Items() []StatusNotifierItem {
+// func (w *StatusNotifierWatcher) Items() []StatusNotifierItem {
+// 	w.mu.Lock()
+// 	defer w.mu.Unlock()
+// 	items := make([]StatusNotifierItem, 0, len(w.items))
+// 	for _, item := range w.items {
+// 		items = append(items, *item)
+// 	}
+// 	return items
+// }
+
+func (w *StatusNotifierWatcher) addSni(sender dbus.Sender, service string) *StatusNotifierItem {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	items := make([]StatusNotifierItem, 0, len(w.items))
-	for _, item := range w.items {
-		items = append(items, item)
-	}
-	return items
-}
 
-func (w *StatusNotifierWatcher) addSni(sender dbus.Sender, service string) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if _, exists := w.items[sender]; exists {
+	if item, exists := w.items[sender]; exists {
 		log.Println("Item already registered, ignoring")
-		return
+		return item
 	}
 
-	w.items[sender] = StatusNotifierItem{
-		Service: service,
-		Sender:  sender,
-	}
+	item := newStatusNotifierItem(service, sender)
+	w.items[sender] = item
+
+	return item
 }
 
 func (w *StatusNotifierWatcher) fetchItemProperties(sender dbus.Sender) {
 	senderName := string(sender)
+	w.mu.Lock()
+	item, exists := w.items[sender]
+	if !exists {
+		w.mu.Unlock()
+		log.Println("Item not found for sender:", senderName)
+		return
+	}
+	w.mu.Unlock()
+
 	log.Println("Fetching properties for sender:", senderName)
 
 	obj := w.conn.Object(
@@ -206,30 +271,48 @@ func (w *StatusNotifierWatcher) fetchItemProperties(sender dbus.Sender) {
 		return
 	}
 
-	properties, err := ParseItemProperties(senderName, props)
-	if err != nil {
+	if err := ParseItemProperties(item.Properties, props); err != nil {
 		log.Println("Failed to parse properties:", err)
 		return
 	}
 
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	log.Println("Updated properties for sender:", senderName)
+}
 
+func (w *StatusNotifierWatcher) propertyChanged(sender dbus.Sender, changedProps map[string]dbus.Variant) {
+	senderName := string(sender)
+	w.mu.Lock()
 	item, exists := w.items[sender]
 	if !exists {
+		w.mu.Unlock()
 		log.Println("Item not found for sender:", senderName)
 		return
 	}
+	w.mu.Unlock()
 
-	item.Properties = properties
-	w.items[sender] = item
+	log.Println("Processing property changes for sender:", senderName)
+
+	if err := ParseItemProperties(item.Properties, changedProps); err != nil {
+		log.Println("Failed to update properties:", err)
+		return
+	}
 
 	log.Println("Updated properties for sender:", senderName)
 }
 
-func (w *StatusNotifierWatcher) addRemoveSignal(add bool, sender dbus.Sender, member string, path string, interfaceName string) error {
-	matchRule := fmt.Sprintf("type='signal',interface='%s',path='%s',member='%s',sender='%s'",
-		interfaceName, path, member, string(sender))
+func (w *StatusNotifierWatcher) addOrRemoveSignal(add bool, sender dbus.Sender, signal SignalInfo) error {
+
+	matchRule := fmt.Sprintf("type='signal',interface='%s'", signal.Interface)
+	if sender != "" {
+		matchRule += fmt.Sprintf(",sender='%s'", string(sender))
+	}
+	if signal.Member != "" {
+		matchRule += fmt.Sprintf(",member='%s'", signal.Member)
+	}
+	if signal.Path != "" {
+		matchRule += fmt.Sprintf(",path='%s'", signal.Path)
+	}
+
 	method := "AddMatch"
 	if !add {
 		method = "RemoveMatch"
@@ -242,19 +325,23 @@ func (w *StatusNotifierWatcher) addRemoveSignal(add bool, sender dbus.Sender, me
 	return nil
 }
 
-func (w *StatusNotifierWatcher) registerSignals(sender dbus.Sender) error {
+func (w *StatusNotifierWatcher) registerItemSignals(sender dbus.Sender) error {
 	// register item signals
 	for _, signal := range itemSignals {
-		if err := w.addRemoveSignal(true, sender, signal, "/StatusNotifierItem", "org.kde.StatusNotifierItem"); err != nil {
+		if err := w.addOrRemoveSignal(true, sender, signal); err != nil {
 			return fmt.Errorf("failed to register signal %s: %w", signal, err)
 		}
 	}
 
 	// register menu signals
 	for _, signal := range menuSignals {
-		if err := w.addRemoveSignal(true, sender, signal, "/StatusNotifierMenu", "com.canonical.dbusmenu"); err != nil {
+		if err := w.addOrRemoveSignal(true, sender, signal); err != nil {
 			return fmt.Errorf("failed to register signal %s: %w", signal, err)
 		}
+	}
+
+	if err := w.addOrRemoveSignal(true, sender, itemPropChangeSignal); err != nil {
+		return fmt.Errorf("failed to register signal %s: %w", itemPropChangeSignal, err)
 	}
 
 	return nil
@@ -262,36 +349,55 @@ func (w *StatusNotifierWatcher) registerSignals(sender dbus.Sender) error {
 
 // handleSignals processes incoming D-Bus signals
 func (w *StatusNotifierWatcher) handleSignals(signals chan *dbus.Signal) {
-	for signal := range signals {
-		if slices.Contains(itemSignals, signal.Name) {
-			log.Printf("Received signal: %s from %s\n", signal.Name, signal.Sender)
-
-			w.fetchItemProperties(dbus.Sender(signal.Sender))
-		}
-		// if signal.Name == "org.kde.StatusNotifierWatcher.StatusNotifierItemRegistered" {
-		// 	if len(signal.Body) > 0 {
-		// 		service, ok := signal.Body[0].(string)
-		// 		if !ok {
-		// 			continue
-		// 		}
-
-		// 		sender := signal.Sender
-		// 		fmt.Printf("Signal received: service=%s, sender=%s\n", service, sender)
-
-		// 		// If service is a path, store the sender mapping
-		// 		if strings.HasPrefix(service, "/") {
-		// 			if m.itemSenders == nil {
-		// 				m.itemSenders = make(map[string]string)
-		// 			}
-		// 			m.itemSenders[service] = sender
-		// 			fmt.Printf("  Mapped path %s -> sender %s\n", service, sender)
-
-		// 			// Now re-query with the correct sender
-		// 			go m.queryItemProperties(service, sender)
-		// 		}
-		// 	}
-		// }
+	splitSignalName := func(signalName string) (string, string) {
+		i := strings.LastIndex(signalName, ".")
+		ifName := signalName[:i]
+		method := signalName[i+1:]
+		return ifName, method
 	}
+	for signal := range signals {
+		log.Printf("Received signal: %+v\n", signal)
+
+		ifName, method := splitSignalName(signal.Name)
+		sender := dbus.Sender(signal.Sender)
+
+		if ifName == "org.kde.StatusNotifierItem" && slices.Contains(itemSignals, SignalInfo{ifName, method, "/StatusNotifierItem"}) {
+			w.fetchItemProperties(sender)
+			return
+		}
+
+		switch signal.Name {
+		case nameChangedSignal.Name():
+			w.onNameOwnerChanged(signal.Body[1].(string), signal.Body[2].(string))
+
+		case itemPropChangeSignal.Name():
+			if len(signal.Body) < 2 || signal.Body[0].(string) != "org.kde.StatusNotifierItem" {
+				log.Println("Ignore event")
+				return
+			}
+			w.propertyChanged(sender, signal.Body[1].(map[string]dbus.Variant))
+		}
+	}
+}
+
+func (w *StatusNotifierWatcher) onNameOwnerChanged(old, new string) {
+	if new != "" {
+		return // not a disappearance
+	}
+
+	sender := dbus.Sender(old)
+
+	w.mu.Lock()
+	item, exists := w.items[sender]
+	if !exists {
+		w.mu.Unlock()
+		return
+	}
+
+	delete(w.items, sender)
+	w.mu.Unlock()
+
+	w.ItemRemoveCh <- item
 }
 
 // func (w *MockStatusNotifierWatcher) emitItemsChanged() {
