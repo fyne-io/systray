@@ -167,6 +167,14 @@ func nativeLoop() int {
 func nativeEnd() {
 	runSystrayExit()
 	instance.conn.Close()
+
+	instance.lock.Lock()
+	defer instance.lock.Unlock()
+	instance.conn = nil
+	instance.props = nil
+	quitChan = make(chan struct{})
+	systrayExitCalled = false
+	quitOnce = sync.Once{}
 }
 
 func quit() {

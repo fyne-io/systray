@@ -22,7 +22,6 @@ func (d *DbusDaemon) Close() {
 	// Kill the daemon
 	if d.monitorCmd != nil && d.monitorCmd.Process != nil {
 		d.monitorCmd.Process.Kill()
-		d.monitorCmd.Process.Wait()
 		d.monitorCmd = nil
 	}
 	fmt.Println("D-Bus monitor stopped")
