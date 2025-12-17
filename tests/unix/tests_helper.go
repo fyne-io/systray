@@ -7,7 +7,6 @@ import (
 )
 
 // waitForChannel waits for a value on the given channel or times out after the specified duration.
-// It returns true if a value was received, false if it timed out.
 func waitForChannel[T any](t *testing.T, ch <-chan T) T {
 	t.Helper()
 

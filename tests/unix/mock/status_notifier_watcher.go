@@ -212,16 +212,6 @@ func (w *StatusNotifierWatcher) GetAll(iface string) (map[string]dbus.Variant, *
 	}, nil
 }
 
-// func (w *StatusNotifierWatcher) Items() []StatusNotifierItem {
-// 	w.mu.Lock()
-// 	defer w.mu.Unlock()
-// 	items := make([]StatusNotifierItem, 0, len(w.items))
-// 	for _, item := range w.items {
-// 		items = append(items, *item)
-// 	}
-// 	return items
-// }
-
 func (w *StatusNotifierWatcher) addSni(sender dbus.Sender, service string) *StatusNotifierItem {
 	w.mu.Lock()
 	defer w.mu.Unlock()
