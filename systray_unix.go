@@ -25,7 +25,7 @@ import (
 
 const (
 	path     = "/StatusNotifierItem"
-	menuPath = "/StatusNotifierMenu"
+	menuPath = "/StatusNotifierItem/menu"
 )
 
 var (
