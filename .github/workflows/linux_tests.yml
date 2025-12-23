@@ -1,0 +1,26 @@
+name: Run tests for Linux
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install dbus
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus
+
+      - name: Run tests
+        run: go test -count=1 fyne.io/systray/tests/unix
