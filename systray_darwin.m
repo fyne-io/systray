@@ -91,6 +91,11 @@ withParentMenuId: (int)theParentMenuId
 {
   self->statusItem = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
 
+  NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier];
+  if (bundleId) {
+    self->statusItem.autosaveName = bundleId;
+  }
+
   self->menu = [[NSMenu alloc] init];
   self->menu.delegate = self;
   self->menu.autoenablesItems = FALSE;
@@ -106,6 +111,10 @@ withParentMenuId: (int)theParentMenuId
   [NSEvent addLocalMonitorForEventsMatchingMask: (NSEventTypeLeftMouseDown|NSEventTypeRightMouseDown)
                                         handler: ^NSEvent *(NSEvent *event) {
     if (event.window != self->statusItem.button.window) {
+      return event;
+    }
+
+    if (event.modifierFlags & NSEventModifierFlagCommand) {
       return event;
     }
 
