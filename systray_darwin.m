@@ -109,6 +109,10 @@ withParentMenuId: (int)theParentMenuId
       return event;
     }
 
+    if (event.modifierFlags & NSEventModifierFlagCommand) {
+      return event;
+    }
+
     [self leftMouseClicked];
 
     return nil;
@@ -285,9 +289,11 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 
 - (void)show_menu
 {
+  self->statusItem.button.highlighted = YES;
   [self->menu popUpMenuPositioningItem:nil
-                            atLocation:NSMakePoint(0, self->statusItem.button.bounds.size.height+6)
+                            atLocation:NSMakePoint(0, 0)
                                 inView:self->statusItem.button];
+  self->statusItem.button.highlighted = NO;
 }
 
 - (void) show_menu_item:(NSNumber*) menuId
