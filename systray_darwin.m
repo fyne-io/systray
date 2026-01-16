@@ -286,7 +286,7 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 - (void)show_menu
 {
   [self->menu popUpMenuPositioningItem:nil
-                            atLocation:NSMakePoint(0, self->statusItem.button.bounds.size.height+6)
+                            atLocation:NSMakePoint(0, 0)
                                 inView:self->statusItem.button];
 }
 
