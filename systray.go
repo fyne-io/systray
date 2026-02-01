@@ -9,9 +9,25 @@ import (
 	"sync/atomic"
 )
 
+// ScrollDirection represents the direction of a scroll event
+type ScrollDirection string
+
+const (
+	// ScrollUp indicates scrolling up (or away from user)
+	ScrollUp ScrollDirection = "vertical-up"
+	// ScrollDown indicates scrolling down (or towards user)
+	ScrollDown ScrollDirection = "vertical-down"
+	// ScrollLeft indicates scrolling left
+	ScrollLeft ScrollDirection = "horizontal-left"
+	// ScrollRight indicates scrolling right
+	ScrollRight ScrollDirection = "horizontal-right"
+)
+
 var (
 	systrayReady, systrayExit func()
 	tappedLeft, tappedRight   func()
+	tappedMiddle              func()
+	scrolled                  func(direction ScrollDirection)
 	systrayExitCalled         bool
 	menuItems                 = make(map[uint32]*MenuItem)
 	menuItemsLock             sync.RWMutex
@@ -149,12 +165,30 @@ func Quit() {
 	quitOnce.Do(quit)
 }
 
+// SetOnTapped sets a callback for left-click on the tray icon.
+// Available on Windows, macOS, and Linux.
 func SetOnTapped(f func()) {
 	tappedLeft = f
 }
 
+// SetOnSecondaryTapped sets a callback for right-click on the tray icon.
+// Available on Windows, macOS, and Linux.
 func SetOnSecondaryTapped(f func()) {
 	tappedRight = f
+}
+
+// SetOnMiddleTapped sets a callback for middle-click on the tray icon.
+// Available on Linux only. On other platforms, middle-click may trigger
+// the secondary (right-click) callback instead.
+func SetOnMiddleTapped(f func()) {
+	tappedMiddle = f
+}
+
+// SetOnScroll sets a callback for scroll events on the tray icon.
+// The callback receives the scroll direction.
+// Available on Linux only.
+func SetOnScroll(f func(direction ScrollDirection)) {
+	scrolled = f
 }
 
 // AddMenuItem adds a menu item with the designated title and tooltip.
