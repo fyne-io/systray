@@ -79,7 +79,7 @@ cd systray/example
 go run .
 ```
 
-On Windows, you should follow the instructions above, but use the followign run command:
+On Windows, you should follow the instructions above, but use the following run command:
 
 ```
 go run -ldflags "-H=windowsgui" .
