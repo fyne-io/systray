@@ -1,6 +1,6 @@
 module fyne.io/systray
 
-go 1.24.0
+go 1.26
 
 require (
 	github.com/godbus/dbus/v5 v5.2.2
