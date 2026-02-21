@@ -424,10 +424,10 @@ func argbForImage(img image.Image) []byte {
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			r, g, b, a := img.At(x, y).RGBA()
-			data[i] = byte(a)
-			data[i+1] = byte(r)
-			data[i+2] = byte(g)
-			data[i+3] = byte(b)
+			data[i] = byte(a / 256)
+			data[i+1] = byte(r / 256)
+			data[i+2] = byte(g / 256)
+			data[i+3] = byte(b / 256)
 			i += 4
 		}
 	}
