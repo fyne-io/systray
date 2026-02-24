@@ -189,6 +189,43 @@ func systray_right_click() {
 	C.show_menu()
 }
 
+//export systray_middle_click
+func systray_middle_click() {
+	if fn := tappedMiddle; fn != nil {
+		fn()
+		return
+	}
+
+	// Fall back to right-click behavior
+	if fn := tappedRight; fn != nil {
+		fn()
+		return
+	}
+
+	C.show_menu()
+}
+
+//export systray_scroll
+func systray_scroll(delta C.int, horizontal C.bool) {
+	if fn := scrolled; fn == nil {
+		return
+	}
+
+	if horizontal {
+		if delta > 0 {
+			scrolled(ScrollRight)
+		} else {
+			scrolled(ScrollLeft)
+		}
+	} else {
+		if delta > 0 {
+			scrolled(ScrollUp)
+		} else {
+			scrolled(ScrollDown)
+		}
+	}
+}
+
 //export systray_ready
 func systray_ready() {
 	systrayReady()
