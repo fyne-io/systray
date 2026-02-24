@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 )
@@ -96,6 +95,9 @@ var ErrUnknownSignal = errors.New("unknown signal")
 func LookupSignal(signal *dbus.Signal) (Signal, error) {
 	switch signal.Name {
 	case InterfaceDbusmenu + "." + "ItemsPropertiesUpdated":
+		if len(signal.Body) < 2 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 2", len(signal.Body))
+		}
 		v0, ok := signal.Body[0].([]struct {
 			V0 int32
 			V1 map[string]dbus.Variant
@@ -119,6 +121,9 @@ func LookupSignal(signal *dbus.Signal) (Signal, error) {
 			},
 		}, nil
 	case InterfaceDbusmenu + "." + "LayoutUpdated":
+		if len(signal.Body) < 2 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 2", len(signal.Body))
+		}
 		v0, ok := signal.Body[0].(uint32)
 		if !ok {
 			return nil, fmt.Errorf("prop .Revision is %T, not uint32", signal.Body[0])
@@ -136,6 +141,9 @@ func LookupSignal(signal *dbus.Signal) (Signal, error) {
 			},
 		}, nil
 	case InterfaceDbusmenu + "." + "ItemActivationRequested":
+		if len(signal.Body) < 2 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 2", len(signal.Body))
+		}
 		v0, ok := signal.Body[0].(int32)
 		if !ok {
 			return nil, fmt.Errorf("prop .Id is %T, not int32", signal.Body[0])

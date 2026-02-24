@@ -124,6 +124,7 @@ func SetTooltip(tooltipTitle string) {
 	instance.lock.Lock()
 	instance.tooltipTitle = tooltipTitle
 	props := instance.props
+	conn := instance.conn
 	defer instance.lock.Unlock()
 
 	if props == nil {
@@ -133,6 +134,19 @@ func SetTooltip(tooltipTitle string) {
 		dbus.MakeVariant(tooltip{V2: tooltipTitle}))
 	if dbusErr != nil {
 		log.Printf("systray error: failed to set ToolTip prop: %s\n", dbusErr)
+		return
+	}
+
+	if conn == nil {
+		return
+	}
+
+	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewToolTipSignal{
+		Path: path,
+		Body: &notifier.StatusNotifierItem_NewToolTipSignalBody{},
+	})
+	if err != nil {
+		log.Printf("systray error: failed to emit new tooltip signal: %s\n", err)
 		return
 	}
 }
