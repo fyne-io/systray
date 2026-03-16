@@ -266,13 +266,21 @@ func (item *MenuItem) Remove() {
 	}
 	removeMenuItem(item)
 	menuItemsLock.Lock()
+	defer menuItemsLock.Unlock()
 	delete(menuItems, item.id)
+	if item.ClickedCh == nil {
+		log.Printf("systray warning: channel from menu item %d (%s) is nil!\n", item.id, item.title)
+		return
+	}
 	select {
-	case <-item.ClickedCh:
+	case _, ok := <-item.ClickedCh:
+		if !ok {
+			log.Printf("systray warning: channel from menu item %d (%s) already closed!\n", item.id, item.title)
+			return
+		}
 	default:
 	}
 	close(item.ClickedCh)
-	menuItemsLock.Unlock()
 }
 
 // Show shows a previously hidden menu item
