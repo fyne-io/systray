@@ -483,6 +483,12 @@ func (t *winTray) initInstance() error {
 func (t *winTray) createMenu() error {
 	const MIM_APPLYTOSUBMENUS = 0x80000000 // Settings apply to the menu and all of its submenus
 
+	// Before creating a new menu, destroy the old one
+	if t.menus[0] != 0 {
+		pDestroyMenu.Call(uintptr(t.menus[0]))
+		t.menus[0] = 0
+	}
+
 	menuHandle, _, err := pCreatePopupMenu.Call()
 	if menuHandle == 0 {
 		return err
