@@ -1,3 +1,5 @@
+//go:build (linux || freebsd || openbsd || netbsd) && !android
+
 package systray
 
 import (
@@ -31,6 +33,12 @@ func (i *leftRightNotifierItem) ContextMenu(_, _ int32) *dbus.Error {
 }
 
 func (i *leftRightNotifierItem) SecondaryActivate(_, _ int32) *dbus.Error {
+	// Middle-click: use dedicated handler if set, otherwise fall back to right-click
+	if f := tappedMiddle; f != nil {
+		tappedMiddle()
+		return nil
+	}
+
 	if f := tappedRight; f == nil {
 		return &dbus.ErrMsgUnknownMethod
 	}
@@ -39,6 +47,27 @@ func (i *leftRightNotifierItem) SecondaryActivate(_, _ int32) *dbus.Error {
 	return nil
 }
 
-func (i *leftRightNotifierItem) Scroll(_ int32, _ string) *dbus.Error {
-	return &dbus.ErrMsgUnknownMethod
+func (i *leftRightNotifierItem) Scroll(delta int32, orientation string) *dbus.Error {
+	if f := scrolled; f == nil {
+		return &dbus.ErrMsgUnknownMethod
+	}
+
+	var direction ScrollDirection
+	if orientation == "horizontal" {
+		if delta > 0 {
+			direction = ScrollRight
+		} else {
+			direction = ScrollLeft
+		}
+	} else {
+		// "vertical" or default
+		if delta > 0 {
+			direction = ScrollUp
+		} else {
+			direction = ScrollDown
+		}
+	}
+
+	scrolled(direction)
+	return nil
 }

@@ -298,6 +298,8 @@ func (t *winTray) wndProc(hWnd windows.Handle, message uint32, wParam, lParam ui
 	const (
 		WM_RBUTTONUP  = 0x0205
 		WM_LBUTTONUP  = 0x0202
+		WM_MBUTTONUP  = 0x0208
+		WM_MOUSEWHEEL = 0x020A
 		WM_COMMAND    = 0x0111
 		WM_ENDSESSION = 0x0016
 		WM_CLOSE      = 0x0010
@@ -330,6 +332,13 @@ func (t *winTray) wndProc(hWnd windows.Handle, message uint32, wParam, lParam ui
 			systrayLeftClick()
 		case WM_RBUTTONUP:
 			systrayRightClick()
+		case WM_MBUTTONUP:
+			systrayMiddleClick()
+		case WM_MOUSEWHEEL:
+			// Extract wheel delta from wParam high word
+			// https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-mousewheel
+			delta := int16(wParam >> 16)
+			systrayScroll(delta)
 		}
 	case t.wmTaskbarCreated: // on explorer.exe restarts
 		t.muNID.Lock()
@@ -1144,4 +1153,33 @@ func systrayRightClick() {
 	}
 
 	wt.showMenu()
+}
+
+func systrayMiddleClick() {
+	if fn := tappedMiddle; fn != nil {
+		fn()
+		return
+	}
+
+	// Fall back to right-click behavior if no middle handler
+	if fn := tappedRight; fn != nil {
+		fn()
+		return
+	}
+
+	wt.showMenu()
+}
+
+func systrayScroll(delta int16) {
+	if fn := scrolled; fn == nil {
+		return
+	}
+
+	// delta > 0 means scroll up (away from user)
+	// delta < 0 means scroll down (toward user)
+	if delta > 0 {
+		scrolled(ScrollUp)
+	} else {
+		scrolled(ScrollDown)
+	}
 }
