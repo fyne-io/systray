@@ -213,6 +213,8 @@ type winTray struct {
 	cursor,
 	window windows.Handle
 
+	menuVisible uint32
+
 	loadedImages   map[string]windows.Handle
 	muLoadedImages sync.RWMutex
 	// menus keeps track of the submenus keyed by the menu item ID, plus 0
@@ -610,6 +612,9 @@ func (t *winTray) addOrUpdateMenuItem(menuItemId uint32, parentId uint32, title 
 			0,
 			uintptr(unsafe.Pointer(&mi)),
 		)
+		if atomic.LoadUint32(&t.menuVisible) == 0 {
+			_ = t.rebuildMenu()
+		}
 	}
 
 	if res == 0 {
@@ -743,6 +748,9 @@ func (t *winTray) showMenu() error {
 		return err
 	}
 	pSetForegroundWindow.Call(uintptr(t.window))
+
+	atomic.StoreUint32(&t.menuVisible, 1)
+	defer atomic.StoreUint32(&t.menuVisible, 0)
 
 	res, _, err = pTrackPopupMenu.Call(
 		uintptr(t.menus[0]),
@@ -889,19 +897,18 @@ func create32BitHBitmap(hDC uintptr, cx, cy int32) (uintptr, error) {
 	return hBitmap, nil
 }
 
-func registerSystray() {
+func registerSystray() error {
 	if err := wt.initInstance(); err != nil {
-		log.Printf("systray error: unable to init instance: %s\n", err)
-		return
+		return fmt.Errorf("systray: unable to init instance: %w", err)
 	}
 
 	if err := wt.createMenu(); err != nil {
-		log.Printf("systray error: unable to create menu: %s\n", err)
-		return
+		return fmt.Errorf("systray: unable to create menu: %w", err)
 	}
 
 	wt.initialized.Store(true)
 	systrayReady()
+	return nil
 }
 
 var m = &struct {
@@ -913,22 +920,38 @@ var m = &struct {
 	Pt           point
 }{}
 
-func nativeLoop() {
-	for doNativeTick() {
+func nativeLoop() error {
+	for {
+		cont, err := doNativeTick()
+		if err != nil {
+			return err
+		}
+		if !cont {
+			break
+		}
 	}
+	return nil
 }
 
 func nativeEnd() {
 }
 
-func nativeStart() {
+func nativeStart() error {
 	go func() {
-		for doNativeTick() {
+		for {
+			cont, err := doNativeTick()
+			if err != nil {
+				log.Printf("systray error: %v\n", err)
+			}
+			if !cont {
+				break
+			}
 		}
 	}()
+	return nil
 }
 
-func doNativeTick() bool {
+func doNativeTick() (bool, error) {
 	ret, _, err := pGetMessage.Call(uintptr(unsafe.Pointer(m)), 0, 0, 0)
 
 	// If the function retrieves a message other than WM_QUIT, the return value is nonzero.
@@ -937,15 +960,14 @@ func doNativeTick() bool {
 	// https://msdn.microsoft.com/en-us/library/windows/desktop/ms644936(v=vs.85).aspx
 	switch int32(ret) {
 	case -1:
-		log.Printf("systray error: message loop failure: %s\n", err)
-		return false
+		return false, fmt.Errorf("systray: message loop failure: %w", err)
 	case 0:
-		return false
+		return false, nil
 	default:
 		pTranslateMessage.Call(uintptr(unsafe.Pointer(m)))
 		pDispatchMessage.Call(uintptr(unsafe.Pointer(m)))
 	}
-	return true
+	return true, nil
 }
 
 func quit() {
@@ -985,16 +1007,15 @@ func iconBytesToFilePath(iconBytes []byte) (string, error) {
 // SetIcon sets the systray icon.
 // iconBytes should be the content of .ico for windows and .ico/.jpg/.png
 // for other platforms.
-func SetIcon(iconBytes []byte) {
+func SetIcon(iconBytes []byte) error {
 	iconFilePath, err := iconBytesToFilePath(iconBytes)
 	if err != nil {
-		log.Printf("systray error: unable to write icon data to temp file: %s\n", err)
-		return
+		return fmt.Errorf("systray: unable to write icon data to temp file: %w", err)
 	}
 	if err := wt.setIcon(iconFilePath); err != nil {
-		log.Printf("systray error: unable to set icon: %s\n", err)
-		return
+		return fmt.Errorf("systray: unable to set icon: %w", err)
 	}
+	return nil
 }
 
 // SetIconFromFilePath sets the systray icon from a file path.
@@ -1011,13 +1032,14 @@ func SetIconFromFilePath(iconFilePath string) error {
 // to a regular icon on other platforms.
 // templateIconBytes and iconBytes should be the content of .ico for windows and
 // .ico/.jpg/.png for other platforms.
-func SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte) {
-	SetIcon(regularIconBytes)
+func SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte) error {
+	return SetIcon(regularIconBytes)
 }
 
 // SetTitle sets the systray title, only available on Mac and Linux.
-func SetTitle(title string) {
+func SetTitle(title string) error {
 	// do nothing
+	return nil
 }
 
 func (item *MenuItem) parentId() uint32 {
@@ -1029,18 +1051,13 @@ func (item *MenuItem) parentId() uint32 {
 
 // SetIcon sets the icon of a menu item. Only works on macOS and Windows.
 // iconBytes should be the content of .ico/.jpg/.png
-func (item *MenuItem) SetIcon(iconBytes []byte) {
+func (item *MenuItem) SetIcon(iconBytes []byte) error {
 	iconFilePath, err := iconBytesToFilePath(iconBytes)
 	if err != nil {
-		log.Printf("systray error: unable to write icon data to temp file: %s\n", err)
-		return
+		return fmt.Errorf("systray: unable to write icon data to temp file: %w", err)
 	}
 
-	err = item.SetIconFromFilePath(iconFilePath)
-	if err != nil {
-		log.Printf("systray error: %s\n", err)
-		return
-	}
+	return item.SetIconFromFilePath(iconFilePath)
 }
 
 // SetIconFromFilePath sets the icon of a menu item from a file path.
@@ -1068,55 +1085,55 @@ func (item *MenuItem) SetIconFromFilePath(iconFilePath string) error {
 
 // SetTooltip sets the systray tooltip to display on mouse hover of the tray icon,
 // only available on Mac and Windows.
-func SetTooltip(tooltip string) {
+func SetTooltip(tooltip string) error {
 	if err := wt.setTooltip(tooltip); err != nil {
-		log.Printf("systray error: unable to set tooltip: %s\n", err)
-		return
+		return fmt.Errorf("systray: unable to set tooltip: %w", err)
 	}
+	return nil
 }
 
-func addOrUpdateMenuItem(item *MenuItem) {
+func addOrUpdateMenuItem(item *MenuItem) error {
 	err := wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.disabled, item.checked)
 	if err != nil {
-		log.Printf("systray error: unable to addOrUpdateMenuItem: %s\n", err)
-		return
+		return fmt.Errorf("systray: unable to addOrUpdateMenuItem: %w", err)
 	}
+	return nil
 }
 
 // SetTemplateIcon sets the icon of a menu item as a template icon (on macOS). On Windows, it
 // falls back to the regular icon bytes and on Linux it does nothing.
 // templateIconBytes and regularIconBytes should be the content of .ico for windows and
 // .ico/.jpg/.png for other platforms.
-func (item *MenuItem) SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte) {
-	item.SetIcon(regularIconBytes)
+func (item *MenuItem) SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte) error {
+	return item.SetIcon(regularIconBytes)
 }
 
-func addSeparator(id uint32, parent uint32) {
+func addSeparator(id uint32, parent uint32) error {
 	err := wt.addSeparatorMenuItem(id, parent)
 	if err != nil {
-		log.Printf("systray error: unable to addSeparator: %s\n", err)
-		return
+		return fmt.Errorf("systray: unable to addSeparator: %w", err)
 	}
+	return nil
 }
 
-func hideMenuItem(item *MenuItem) {
+func hideMenuItem(item *MenuItem) error {
 	err := wt.hideMenuItem(uint32(item.id), item.parentId())
 	if err != nil {
-		log.Printf("systray error: unable to hideMenuItem: %s\n", err)
-		return
+		return fmt.Errorf("systray: unable to hideMenuItem: %w", err)
 	}
+	return nil
 }
 
-func removeMenuItem(item *MenuItem) {
+func removeMenuItem(item *MenuItem) error {
 	err := wt.removeMenuItem(uint32(item.id), item.parentId())
 	if err != nil {
-		log.Printf("systray error: unable to removeMenuItem: %s\n", err)
-		return
+		return fmt.Errorf("systray: unable to removeMenuItem: %w", err)
 	}
+	return nil
 }
 
-func showMenuItem(item *MenuItem) {
-	addOrUpdateMenuItem(item)
+func showMenuItem(item *MenuItem) error {
+	return addOrUpdateMenuItem(item)
 }
 
 func resetMenu() {
@@ -1144,4 +1161,27 @@ func systrayRightClick() {
 	}
 
 	wt.showMenu()
+}
+
+func (t *winTray) rebuildMenu() error {
+	resetMenu()
+	menuItemsLock.Lock()
+	var items []*MenuItem
+	for _, item := range menuItems {
+		items = append(items, item)
+	}
+	menuItemsLock.Unlock()
+
+	for i := 0; i < len(items); i++ {
+		for j := i + 1; j < len(items); j++ {
+			if items[i].id > items[j].id {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
+	}
+
+	for _, item := range items {
+		addOrUpdateMenuItem(item)
+	}
+	return nil
 }
