@@ -285,8 +285,15 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 
 - (void)show_menu
 {
+  // Anchor at (0, 0) of the status button so AppKit measures available vertical
+  // space from the menubar itself. The upstream value (0, height+6) places the
+  // menu's top ABOVE the button, which on MacBook notch displays (with the
+  // system-reserved safe area around the notch) makes AppKit decide the menu
+  // doesn't fit and flips it into scroll mode — a "^" arrow appears at the top
+  // and some rows are hidden. Anchoring at (0, 0) restores normal rendering
+  // on notch screens without changing behavior on external displays.
   [self->menu popUpMenuPositioningItem:nil
-                            atLocation:NSMakePoint(0, self->statusItem.button.bounds.size.height+6)
+                            atLocation:NSMakePoint(0, 0)
                                 inView:self->statusItem.button];
 }
 
