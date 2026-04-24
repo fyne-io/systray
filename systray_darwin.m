@@ -100,33 +100,32 @@ withParentMenuId: (int)theParentMenuId
   // always visible at application startup.
   self->statusItem.visible = TRUE;
 
-  NSStatusBarButton *button = self->statusItem.button;
-  button.action = @selector(leftMouseClicked);
-
-  [NSEvent addLocalMonitorForEventsMatchingMask: (NSEventTypeLeftMouseDown|NSEventTypeRightMouseDown)
-                                        handler: ^NSEvent *(NSEvent *event) {
-    if (event.window != self->statusItem.button.window) {
-      return event;
-    }
-
-    [self leftMouseClicked];
-
-    return nil;
-  }];
-
-  NSSize size = [button frame].size;
-  NSRect frame = CGRectMake(0, 0, size.width, size.height);
-  RightClickDetector *rightClicker = [[RightClickDetector alloc] initWithFrame:frame];
-  rightClicker.onRightClicked = ^(NSEvent *event) {
-    [self rightMouseClicked];
-  };
-
-  rightClicker.autoresizingMask = (NSViewWidthSizable |
-                                   NSViewHeightSizable);
-  button.autoresizesSubviews = YES;
-  [button addSubview:rightClicker];
+  // Attach the menu permanently to the status item so AppKit handles display
+  // natively. This is the only way to get correct geometry when the system
+  // mirrors the menubar onto multiple screens ("Displays have separate Spaces"
+  // is on by default): each mirror's click pops the menu on its own display
+  // with proper available-height measurement. Synthesising clicks via
+  // performClick: on a primary-screen button and hoping AppKit forwards the
+  // popup to the clicked mirror doesn't work — the menu ends up measured
+  // against the wrong display and flips into NSMenu scroll mode ("^" arrow).
+  //
+  // Kopi only needs "left-click shows menu"; upstream systray's tappedLeft /
+  // tappedRight custom callback hooks are bypassed in this fork, which is an
+  // accepted trade for correct multi-display rendering.
+  self->statusItem.menu = self->menu;
 
   systray_ready();
+}
+
+// menuDidClose here is the fork's own NSMenuDelegate hook to drive the status
+// button highlight state. menuWillOpen for the same purpose is merged into
+// the existing menuWillOpen: further down that also fires Go's
+// systray_menu_will_open().
+- (void)menuDidClose:(NSMenu *)incomingMenu
+{
+  if (incomingMenu == self->menu) {
+    self->statusItem.button.highlighted = NO;
+  }
 }
 
 - (void)rightMouseClicked {
@@ -190,7 +189,16 @@ withParentMenuId: (int)theParentMenuId
   systray_menu_item_selected(menuId.intValue);
 }
 
-- (void)menuWillOpen:(NSMenu *)menu {
+- (void)menuWillOpen:(NSMenu *)incomingMenu {
+  // Kopi fork: drive the status button press-state highlight explicitly when
+  // our main menu opens. The native auto-highlight on NSStatusItem doesn't
+  // fire reliably under the statusItem.menu + mirrored-menubar path, so we
+  // toggle highlighted around menuWillOpen / menuDidClose. Scoped to the
+  // top-level menu only (submenus open with the same delegate but shouldn't
+  // re-toggle the status button state).
+  if (incomingMenu == self->menu) {
+    self->statusItem.button.highlighted = YES;
+  }
   systray_menu_will_open();
 }
 
@@ -285,16 +293,11 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 
 - (void)show_menu
 {
-  // Anchor at (0, 0) of the status button so AppKit measures available vertical
-  // space from the menubar itself. The upstream value (0, height+6) places the
-  // menu's top ABOVE the button, which on MacBook notch displays (with the
-  // system-reserved safe area around the notch) makes AppKit decide the menu
-  // doesn't fit and flips it into scroll mode — a "^" arrow appears at the top
-  // and some rows are hidden. Anchoring at (0, 0) restores normal rendering
-  // on notch screens without changing behavior on external displays.
-  [self->menu popUpMenuPositioningItem:nil
-                            atLocation:NSMakePoint(0, 0)
-                                inView:self->statusItem.button];
+  // No-op in this fork: the menu is permanently attached to statusItem in
+  // applicationDidFinishLaunching, and AppKit presents it natively on click
+  // (including on mirrored menubars across multiple displays, which is why
+  // the synthesized-click path was removed). Kept for ABI compatibility with
+  // Go-side C.show_menu() callers who reach it via a tappedLeft fallback.
 }
 
 - (void) show_menu_item:(NSNumber*) menuId
