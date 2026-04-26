@@ -94,6 +94,14 @@ withParentMenuId: (int)theParentMenuId
   self->menu = [[NSMenu alloc] init];
   self->menu.delegate = self;
   self->menu.autoenablesItems = FALSE;
+  // 固定 minimumWidth 防止菜单宽度抖动:
+  // NSMenu 的"状态列"(checkmark indent)在所有 checkable item 都是 NSOffState
+  // 时会被 AppKit 收掉,菜单整体变窄;勾上某项后又突然展开。视觉上每次切
+  // 复选框 menu 都跳一下宽度。setShowsStateColumn 不是 NSMenu 的公共 API
+  // (我之前误用了,Obj-C 静默忽略),真正稳的做法是直接 pin 一个最小宽度。
+  // 220pt 够容下当前最长的菜单项("Open Settings…"+ tooltip 缓冲),也不会
+  // 显得太宽。后续菜单项变长再调。
+  self->menu.minimumWidth = 220.0;
   // Once the user has removed it, the item needs to be explicitly brought back,
   // even restarting the application is insufficient.
   // Since the interface from Go is relatively simple, for now we ensure it's
