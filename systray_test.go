@@ -8,9 +8,8 @@ import (
 
 func TestMenuItem_Remove(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for receiver constructor.
-		menuItemFunc func() *MenuItem
+		name         string                // description of this test case
+		menuItemFunc func() *MenuItem      // function to create the menu item to be removed
 		checkFunc    func(*MenuItem) error // function to check the state of the menu item after removal
 	}{
 		{
