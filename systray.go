@@ -266,13 +266,19 @@ func (item *MenuItem) Remove() {
 	}
 	removeMenuItem(item)
 	menuItemsLock.Lock()
+	defer menuItemsLock.Unlock()
 	delete(menuItems, item.id)
+	if item.ClickedCh == nil {
+		return
+	}
 	select {
-	case <-item.ClickedCh:
+	case _, ok := <-item.ClickedCh:
+		if !ok {
+			return
+		}
 	default:
 	}
 	close(item.ClickedCh)
-	menuItemsLock.Unlock()
 }
 
 // Show shows a previously hidden menu item
