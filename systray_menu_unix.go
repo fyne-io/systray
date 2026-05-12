@@ -21,6 +21,9 @@ func (item *MenuItem) SetIcon(iconBytes []byte) {
 	m, exists := findLayout(int32(item.id))
 	if exists {
 		m.V1["icon-data"] = dbus.MakeVariant(iconBytes)
+		emitItemPropertiesUpdated(int32(item.id), m.V1)
+		// Property-only change; per spec LayoutUpdated isn't required here,
+		// but kept as a fallback for clients that only watch LayoutUpdated.
 		refresh()
 	}
 }
@@ -193,6 +196,7 @@ type menuLayout = struct {
 
 func addOrUpdateMenuItem(item *MenuItem) {
 	var layout *menuLayout
+	var parentForChildrenDisplayUpdate *menuLayout
 	instance.menuLock.Lock()
 	defer instance.menuLock.Unlock()
 	m, exists := findLayout(int32(item.id))
@@ -210,7 +214,12 @@ func addOrUpdateMenuItem(item *MenuItem) {
 			m, ok := findLayout(int32(item.parent.id))
 			if ok {
 				parent = m
-				parent.V1["children-display"] = dbus.MakeVariant("submenu")
+				if _, already := parent.V1["children-display"]; !already {
+					parent.V1["children-display"] = dbus.MakeVariant("submenu")
+					if parent.V0 != 0 {
+						parentForChildrenDisplayUpdate = parent
+					}
+				}
 			}
 		}
 		parent.V2 = append(parent.V2, dbus.MakeVariant(layout))
@@ -218,6 +227,17 @@ func addOrUpdateMenuItem(item *MenuItem) {
 
 	applyItemToLayout(item, layout)
 	if exists {
+		emitItemPropertiesUpdated(int32(item.id), layout.V1)
+		// Property-only change on an existing item; per spec LayoutUpdated isn't required here,
+		// but kept as a fallback for clients that only watch LayoutUpdated.
+		refresh()
+	} else {
+		// We've added "children-display", that's a property change
+		if parentForChildrenDisplayUpdate != nil {
+			emitItemPropertiesUpdated(parentForChildrenDisplayUpdate.V0, parentForChildrenDisplayUpdate.V1)
+		}
+		// New item appended to a parent's children,
+		// that's a structural change, so LayoutUpdated signal is required
 		refresh()
 	}
 }
@@ -322,6 +342,9 @@ func hideMenuItem(item *MenuItem) {
 	m, exists := findLayout(int32(item.id))
 	if exists {
 		m.V1["visible"] = dbus.MakeVariant(false)
+		emitItemPropertiesUpdated(int32(item.id), m.V1)
+		// Property-only change; per spec LayoutUpdated isn't required here,
+		// but kept as a fallback for clients that only watch LayoutUpdated.
 		refresh()
 	}
 }
@@ -332,7 +355,34 @@ func showMenuItem(item *MenuItem) {
 	m, exists := findLayout(int32(item.id))
 	if exists {
 		m.V1["visible"] = dbus.MakeVariant(true)
+		emitItemPropertiesUpdated(int32(item.id), m.V1)
+		// Property-only change; per spec LayoutUpdated isn't required here,
+		// but kept as a fallback for clients that only watch LayoutUpdated.
 		refresh()
+	}
+}
+
+// emitItemPropertiesUpdated emits the com.canonical.dbusmenu.ItemsPropertiesUpdated
+// signal so desktop clients refresh per-item state (label, enabled, toggle-state,
+// visible, icon-data) without re-querying the whole layout.
+func emitItemPropertiesUpdated(id int32, props map[string]dbus.Variant) {
+	instance.lock.Lock()
+	conn := instance.conn
+	instance.lock.Unlock()
+	if conn == nil {
+		return
+	}
+	err := menu.Emit(conn, &menu.Dbusmenu_ItemsPropertiesUpdatedSignal{
+		Path: menuPath,
+		Body: &menu.Dbusmenu_ItemsPropertiesUpdatedSignalBody{
+			UpdatedProps: []struct {
+				V0 int32
+				V1 map[string]dbus.Variant
+			}{{V0: id, V1: props}},
+		},
+	})
+	if err != nil {
+		log.Printf("systray error: failed to emit items properties updated signal: %v\n", err)
 	}
 }
 
