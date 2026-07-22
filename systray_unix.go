@@ -180,7 +180,9 @@ func nativeLoop() int {
 
 func nativeEnd() {
 	runSystrayExit()
-	instance.conn.Close()
+	if conn := instance.conn; conn != nil {
+		conn.Close()
+	}
 }
 
 func quit() {
