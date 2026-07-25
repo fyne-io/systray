@@ -180,7 +180,70 @@ func nativeLoop() int {
 
 func nativeEnd() {
 	runSystrayExit()
-	instance.conn.Close()
+	instance.lock.Lock()
+	if instance.conn != nil {
+		instance.conn.Close()
+		instance.conn = nil
+	}
+	instance.props = nil
+	instance.menuProps = nil
+	instance.lock.Unlock()
+}
+
+// replayState replays any state changes (icon, title, tooltip, menu items)
+// that were made before the D-Bus connection was established.
+// Must be called after instance.conn and instance.props are set.
+func replayState() {
+	instance.lock.Lock()
+	iconData := instance.iconData
+	title := instance.title
+	tooltipTitle := instance.tooltipTitle
+	conn := instance.conn
+	props := instance.props
+	instance.lock.Unlock()
+
+	if conn == nil || props == nil {
+		return
+	}
+
+	if iconData != nil {
+		props.SetMust("org.kde.StatusNotifierItem", "IconPixmap",
+			[]PX{convertToPixels(iconData)})
+		if err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewIconSignal{
+			Path: path,
+			Body: &notifier.StatusNotifierItem_NewIconSignalBody{},
+		}); err != nil {
+			log.Printf("systray error: failed to emit new icon signal: %s\n", err)
+		}
+	}
+
+	if title != "" {
+		if dbusErr := props.Set("org.kde.StatusNotifierItem", "Title",
+			dbus.MakeVariant(title)); dbusErr != nil {
+			log.Printf("systray error: failed to set Title prop: %s\n", dbusErr)
+		} else if err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewTitleSignal{
+			Path: path,
+			Body: &notifier.StatusNotifierItem_NewTitleSignalBody{},
+		}); err != nil {
+			log.Printf("systray error: failed to emit new title signal: %s\n", err)
+		}
+	}
+
+	if tooltipTitle != "" {
+		if dbusErr := props.Set("org.kde.StatusNotifierItem", "ToolTip",
+			dbus.MakeVariant(tooltip{V2: tooltipTitle})); dbusErr != nil {
+			log.Printf("systray error: failed to set ToolTip prop: %s\n", dbusErr)
+		} else if err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewToolTipSignal{
+			Path: path,
+			Body: &notifier.StatusNotifierItem_NewToolTipSignalBody{},
+		}); err != nil {
+			log.Printf("systray error: failed to emit new tooltip signal: %s\n", err)
+		}
+	}
+
+	// Push the full menu layout so the host queries GetLayout
+	// and sees all items added during onReady.
+	refresh()
 }
 
 func quit() {
@@ -255,6 +318,8 @@ func nativeStart() {
 	instance.props = props
 	instance.menuProps = menuProps
 	instance.lock.Unlock()
+
+	replayState()
 
 	go stayRegistered()
 }
