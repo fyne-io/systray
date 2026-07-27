@@ -112,6 +112,12 @@ func RunWithExternalLoop(onReady, onExit func()) (start, end func()) {
 // To overcome some OS weirdness, On macOS versions before Catalina, calling
 // this does exactly the same as Run().
 func Register(onReady func(), onExit func()) {
+	// quitOnce guards a single tray lifecycle, but it is a package
+	// global that was only ever spent, never renewed - unlike
+	// systrayExitCalled, which is already cleared below. A second
+	// Register therefore came up with the latch used, so its Quit()
+	// was a silent no-op and the tray could not be stopped again.
+	quitOnce = sync.Once{}
 	if onReady == nil {
 		systrayReady = func() {}
 	} else {
