@@ -15,6 +15,12 @@
 
 #endif
 
+// The modifier bits used by the Go API, converted to NSEventModifierFlags below.
+#define SYSTRAY_MOD_SHIFT   (1 << 0)
+#define SYSTRAY_MOD_CONTROL (1 << 1)
+#define SYSTRAY_MOD_ALT     (1 << 2)
+#define SYSTRAY_MOD_SUPER   (1 << 3)
+
 @interface MenuItem : NSObject
 {
   @public
@@ -22,6 +28,8 @@
     NSNumber* parentMenuId;
     NSString* title;
     NSString* tooltip;
+    NSString* shortcutKey;
+    NSEventModifierFlags shortcutMods;
     short disabled;
     short checked;
 }
@@ -29,6 +37,8 @@
 withParentMenuId: (int)theParentMenuId
        withTitle: (const char*)theTitle
      withTooltip: (const char*)theTooltip
+ withShortcutKey: (const char*)theShortcutKey
+withShortcutMods: (unsigned int)theShortcutMods
     withDisabled: (short)theDisabled
      withChecked: (short)theChecked;
      @end
@@ -37,6 +47,8 @@ withParentMenuId: (int)theParentMenuId
      withParentMenuId: (int)theParentMenuId
             withTitle: (const char*)theTitle
           withTooltip: (const char*)theTooltip
+      withShortcutKey: (const char*)theShortcutKey
+     withShortcutMods: (unsigned int)theShortcutMods
          withDisabled: (short)theDisabled
           withChecked: (short)theChecked
 {
@@ -46,6 +58,21 @@ withParentMenuId: (int)theParentMenuId
                                    encoding:NSUTF8StringEncoding];
   tooltip = [[NSString alloc] initWithCString:theTooltip
                                      encoding:NSUTF8StringEncoding];
+  shortcutKey = [[NSString alloc] initWithCString:theShortcutKey
+                                         encoding:NSUTF8StringEncoding];
+  shortcutMods = 0;
+  if (theShortcutMods & SYSTRAY_MOD_SHIFT) {
+    shortcutMods |= NSEventModifierFlagShift;
+  }
+  if (theShortcutMods & SYSTRAY_MOD_CONTROL) {
+    shortcutMods |= NSEventModifierFlagControl;
+  }
+  if (theShortcutMods & SYSTRAY_MOD_ALT) {
+    shortcutMods |= NSEventModifierFlagOption;
+  }
+  if (theShortcutMods & SYSTRAY_MOD_SUPER) {
+    shortcutMods |= NSEventModifierFlagCommand;
+  }
   disabled = theDisabled;
   checked = theChecked;
   return self;
@@ -223,6 +250,8 @@ withParentMenuId: (int)theParentMenuId
   [menuItem setTag:[item->menuId integerValue]];
   [menuItem setTarget:self];
   [menuItem setToolTip:item->tooltip];
+  [menuItem setKeyEquivalent:item->shortcutKey];
+  [menuItem setKeyEquivalentModifierMask:item->shortcutMods];
   if (item->disabled == 1) {
     menuItem.enabled = FALSE;
   } else {
@@ -438,10 +467,11 @@ void setRemovalAllowed(bool allowed) {
   }
 }
 
-void add_or_update_menu_item(int menuId, int parentMenuId, char* title, char* tooltip, short disabled, short checked, short isCheckable) {
-  MenuItem* item = [[MenuItem alloc] initWithId: menuId withParentMenuId: parentMenuId withTitle: title withTooltip: tooltip withDisabled: disabled withChecked: checked];
+void add_or_update_menu_item(int menuId, int parentMenuId, char* title, char* tooltip, char* shortcutKey, unsigned int shortcutMods, short disabled, short checked, short isCheckable) {
+  MenuItem* item = [[MenuItem alloc] initWithId: menuId withParentMenuId: parentMenuId withTitle: title withTooltip: tooltip withShortcutKey: shortcutKey withShortcutMods: shortcutMods withDisabled: disabled withChecked: checked];
   free(title);
   free(tooltip);
+  free(shortcutKey);
   runInMainThread(@selector(add_or_update_menu_item:), (id)item);
 }
 

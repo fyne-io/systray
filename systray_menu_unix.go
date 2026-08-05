@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -286,9 +287,81 @@ func addSeparator(id uint32, parent uint32) {
 	refresh()
 }
 
+// dbusKeyNames maps the platform neutral key names used by SetShortcut to the
+// key names that the dbusmenu specification expects.
+var dbusKeyNames = map[string]string{
+	"BackSpace": "BackSpace",
+	"Delete":    "Delete",
+	"Down":      "Down",
+	"End":       "End",
+	"Enter":     "KP_Enter",
+	"Escape":    "Escape",
+	"F1":        "F1",
+	"F2":        "F2",
+	"F3":        "F3",
+	"F4":        "F4",
+	"F5":        "F5",
+	"F6":        "F6",
+	"F7":        "F7",
+	"F8":        "F8",
+	"F9":        "F9",
+	"F10":       "F10",
+	"F11":       "F11",
+	"F12":       "F12",
+	"Home":      "Home",
+	"Insert":    "Insert",
+	"Left":      "Left",
+	"PageDown":  "Page_Down",
+	"PageUp":    "Page_Up",
+	"Return":    "Return",
+	"Right":     "Right",
+	"Space":     "space",
+	"Tab":       "Tab",
+	"Up":        "Up",
+}
+
+// shortcutForItem returns the dbusmenu "shortcut" value for an item, which is a list of
+// key presses where each press is a list of modifier names followed by the key itself.
+func shortcutForItem(in *MenuItem) [][]string {
+	if in.shortcutKey == "" {
+		return nil
+	}
+
+	var keys []string
+	if in.shortcutMods&KeyModifierControl != 0 {
+		keys = append(keys, "Control")
+	}
+	if in.shortcutMods&KeyModifierAlt != 0 {
+		keys = append(keys, "Alt")
+	}
+	if in.shortcutMods&KeyModifierShift != 0 {
+		keys = append(keys, "Shift")
+	}
+	if in.shortcutMods&KeyModifierSuper != 0 {
+		keys = append(keys, "Super")
+	}
+
+	key, ok := dbusKeyNames[in.shortcutKey]
+	if !ok {
+		if len(in.shortcutKey) > 1 {
+			log.Printf("systray error: unsupported key %q for menu shortcut\n", in.shortcutKey)
+			return nil
+		}
+		key = strings.ToLower(in.shortcutKey)
+	}
+
+	return [][]string{append(keys, key)}
+}
+
 func applyItemToLayout(in *MenuItem, out *menuLayout) {
 	out.V1["enabled"] = dbus.MakeVariant(!in.disabled)
 	out.V1["label"] = dbus.MakeVariant(in.title)
+
+	if shortcut := shortcutForItem(in); shortcut != nil {
+		out.V1["shortcut"] = dbus.MakeVariant(shortcut)
+	} else {
+		delete(out.V1, "shortcut")
+	}
 
 	if in.isCheckable {
 		out.V1["toggle-type"] = dbus.MakeVariant("checkmark")
