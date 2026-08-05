@@ -37,6 +37,21 @@ func init() {
 	runtime.LockOSThread()
 }
 
+// KeyModifier is a bit mask of the modifier keys that form part of a menu item shortcut.
+type KeyModifier int
+
+const (
+	// KeyModifierShift represents the "Shift" key.
+	KeyModifierShift KeyModifier = 1 << iota
+	// KeyModifierControl represents the "Control" key.
+	KeyModifierControl
+	// KeyModifierAlt represents the "Alt" key (also known as "Option" on macOS).
+	KeyModifierAlt
+	// KeyModifierSuper represents the "Super" key (also known as "Command" on macOS
+	// and "Windows" on Microsoft Windows).
+	KeyModifierSuper
+)
+
 // MenuItem is used to keep track each menu item of systray.
 // Don't create it directly, use the one systray.AddMenuItem() returned
 type MenuItem struct {
@@ -55,6 +70,10 @@ type MenuItem struct {
 	checked bool
 	// has the menu item a checkbox (Linux)
 	isCheckable bool
+	// shortcutKey is the key of the keyboard shortcut for this item, if any
+	shortcutKey string
+	// shortcutMods are the modifier keys of the keyboard shortcut for this item
+	shortcutMods KeyModifier
 	// parent item, for sub menus
 	parent *MenuItem
 }
@@ -227,6 +246,26 @@ func (item *MenuItem) SetTitle(title string) {
 func (item *MenuItem) SetTooltip(tooltip string) {
 	item.tooltip = tooltip
 	item.update()
+}
+
+// SetShortcut sets the keyboard shortcut that will be displayed alongside this menu item.
+// The key should be a single character such as "S" or one of the named keys understood by
+// all platforms, namely "BackSpace", "Delete", "Down", "End", "Enter", "Escape", "F1" to "F12",
+// "Home", "Insert", "Left", "PageDown", "PageUp", "Return", "Right", "Space", "Tab" and "Up".
+// Passing an empty key removes any shortcut previously set.
+//
+// On macOS the shortcut will also be registered so it can trigger the item, on Linux and
+// Windows it is presented next to the item label but not handled by the system tray.
+func (item *MenuItem) SetShortcut(mods KeyModifier, key string) {
+	item.shortcutMods = mods
+	item.shortcutKey = key
+	item.update()
+}
+
+// Shortcut returns the modifiers and key of the keyboard shortcut for this menu item.
+// An empty key means that no shortcut is set.
+func (item *MenuItem) Shortcut() (mods KeyModifier, key string) {
+	return item.shortcutMods, item.shortcutKey
 }
 
 // Disabled checks if the menu item is disabled

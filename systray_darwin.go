@@ -15,9 +15,61 @@ import "C"
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"strings"
 	"unsafe"
 )
+
+// darwinKeyEquivalents maps the platform neutral key names used by SetShortcut to the
+// key equivalent characters that AppKit expects.
+var darwinKeyEquivalents = map[string]string{
+	"BackSpace": "\x08",
+	"Delete":    "\x7f",
+	"Down":      "\uf701",
+	"End":       "\uf72b",
+	"Enter":     "\x03",
+	"Escape":    "\x1b",
+	"F1":        "\uf704",
+	"F2":        "\uf705",
+	"F3":        "\uf706",
+	"F4":        "\uf707",
+	"F5":        "\uf708",
+	"F6":        "\uf709",
+	"F7":        "\uf70a",
+	"F8":        "\uf70b",
+	"F9":        "\uf70c",
+	"F10":       "\uf70d",
+	"F11":       "\uf70e",
+	"F12":       "\uf70f",
+	"Home":      "\uf729",
+	"Insert":    "\uf727",
+	"Left":      "\uf702",
+	"PageDown":  "\uf72d",
+	"PageUp":    "\uf72c",
+	"Return":    "\n",
+	"Right":     "\uf703",
+	"Space":     " ",
+	"Tab":       "\t",
+	"Up":        "\uf700",
+}
+
+// keyEquivalent returns the AppKit key equivalent for the shortcut of this item,
+// which is empty if no shortcut is set.
+func (item *MenuItem) keyEquivalent() string {
+	if item.shortcutKey == "" {
+		return ""
+	}
+
+	if key, ok := darwinKeyEquivalents[item.shortcutKey]; ok {
+		return key
+	}
+	if len(item.shortcutKey) > 1 {
+		log.Printf("systray error: unsupported key %q for menu shortcut\n", item.shortcutKey)
+		return ""
+	}
+	return strings.ToLower(item.shortcutKey)
+}
 
 // SetTemplateIcon sets the systray icon as a template icon (on Mac), falling back
 // to a regular icon on other platforms.
@@ -137,6 +189,8 @@ func addOrUpdateMenuItem(item *MenuItem) {
 		C.int(parentID),
 		C.CString(item.title),
 		C.CString(item.tooltip),
+		C.CString(item.keyEquivalent()),
+		C.uint(item.shortcutMods),
 		disabled,
 		checked,
 		isCheckable,

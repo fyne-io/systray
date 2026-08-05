@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -544,9 +545,56 @@ func (t *winTray) convertToSubMenu(menuItemId uint32) (windows.Handle, error) {
 func SetRemovalAllowed(allowed bool) {
 }
 
-func (t *winTray) addOrUpdateMenuItem(menuItemId uint32, parentId uint32, title string, disabled, checked bool) error {
+// winKeyNames maps the platform neutral key names used by SetShortcut to the names
+// that are commonly presented in Windows menus.
+var winKeyNames = map[string]string{
+	"BackSpace": "Backspace",
+	"Delete":    "Del",
+	"Enter":     "Enter",
+	"Escape":    "Esc",
+	"Insert":    "Ins",
+	"PageDown":  "PgDn",
+	"PageUp":    "PgUp",
+	"Return":    "Enter",
+}
+
+// shortcutText returns the accelerator text presented after the item label,
+// for example "Ctrl+Shift+S". It is empty if the item has no shortcut.
+func (item *MenuItem) shortcutText() string {
+	if item.shortcutKey == "" {
+		return ""
+	}
+
+	b := strings.Builder{}
+	if item.shortcutMods&KeyModifierControl != 0 {
+		b.WriteString("Ctrl+")
+	}
+	if item.shortcutMods&KeyModifierAlt != 0 {
+		b.WriteString("Alt+")
+	}
+	if item.shortcutMods&KeyModifierShift != 0 {
+		b.WriteString("Shift+")
+	}
+	if item.shortcutMods&KeyModifierSuper != 0 {
+		b.WriteString("Win+")
+	}
+
+	if key, ok := winKeyNames[item.shortcutKey]; ok {
+		b.WriteString(key)
+	} else {
+		b.WriteString(strings.ToUpper(item.shortcutKey))
+	}
+	return b.String()
+}
+
+func (t *winTray) addOrUpdateMenuItem(menuItemId uint32, parentId uint32, title, shortcut string, disabled, checked bool) error {
 	if !wt.isReady() {
 		return ErrTrayNotReadyYet
+	}
+
+	if shortcut != "" {
+		// Windows right aligns any text that follows a tab character in a menu item
+		title += "\t" + shortcut
 	}
 
 	// https://msdn.microsoft.com/en-us/library/windows/desktop/ms647578(v=vs.85).aspx
@@ -1059,7 +1107,7 @@ func (item *MenuItem) SetIconFromFilePath(iconFilePath string) error {
 	wt.menuItemIcons[uint32(item.id)] = h
 	wt.muMenuItemIcons.Unlock()
 
-	err = wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.disabled, item.checked)
+	err = wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.shortcutText(), item.disabled, item.checked)
 	if err != nil {
 		return fmt.Errorf("unable to addOrUpdateMenuItem: %s", err)
 	}
@@ -1076,7 +1124,7 @@ func SetTooltip(tooltip string) {
 }
 
 func addOrUpdateMenuItem(item *MenuItem) {
-	err := wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.disabled, item.checked)
+	err := wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.shortcutText(), item.disabled, item.checked)
 	if err != nil {
 		log.Printf("systray error: unable to addOrUpdateMenuItem: %s\n", err)
 		return
