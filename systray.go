@@ -12,9 +12,13 @@ import (
 var (
 	systrayReady, systrayExit func()
 	tappedLeft, tappedRight   func()
-	systrayExitCalled         bool
-	menuItems                 = make(map[uint32]*MenuItem)
-	menuItemsLock             sync.RWMutex
+	// tappedDouble is read on the platform message-pump thread while
+	// the owner typically sets it from the onReady goroutine, so
+	// unlike the plain handlers above it is accessed atomically.
+	tappedDouble      atomic.Pointer[func()]
+	systrayExitCalled bool
+	menuItems         = make(map[uint32]*MenuItem)
+	menuItemsLock     sync.RWMutex
 
 	initialMenuBuilt sync.WaitGroup
 	currentID        atomic.Uint32
@@ -165,6 +169,25 @@ func SetOnTapped(f func()) {
 
 func SetOnSecondaryTapped(f func()) {
 	tappedRight = f
+}
+
+// SetOnDoubleTapped sets the handler for a left double-click on the tray
+// icon; a nil f clears it. Implemented on Windows; on other platforms
+// the handler is stored but never invoked.
+//
+// While a double-click handler is set and no SetOnTapped handler is,
+// a single left click does nothing, so the menu does not flash open
+// before the second click of a double-click arrives. A right click
+// still opens the menu.
+//
+// The handler runs on the tray message-pump thread. Keep it short or
+// hand the work to another goroutine.
+func SetOnDoubleTapped(f func()) {
+	if f == nil {
+		tappedDouble.Store(nil)
+		return
+	}
+	tappedDouble.Store(&f)
 }
 
 // AddMenuItem adds a menu item with the designated title and tooltip.
