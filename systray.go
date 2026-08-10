@@ -20,6 +20,10 @@ var (
 	currentID        atomic.Uint32
 	quitOnce         sync.Once
 
+	// optimizeMenuUpdates gates suppression of LayoutUpdated for property-only
+	// menu changes on Linux. See SetOptimizeMenuUpdates.
+	optimizeMenuUpdates atomic.Bool
+
 	// TrayOpenedCh receives an entry each time the system tray menu is opened.
 	TrayOpenedCh = make(chan struct{})
 )
@@ -165,6 +169,15 @@ func SetOnTapped(f func()) {
 
 func SetOnSecondaryTapped(f func()) {
 	tappedRight = f
+}
+
+// SetOptimizeMenuUpdates, on Linux, stops property-only changes (SetTitle,
+// SetIcon, Enable, Check, Show, etc.) from also emitting LayoutUpdated, which
+// otherwise makes hosts re-fetch the whole menu and close any open submenu.
+// The default (false) keeps emitting it for clients that only watch
+// LayoutUpdated. Structural changes always emit it. No effect on other platforms.
+func SetOptimizeMenuUpdates(optimize bool) {
+	optimizeMenuUpdates.Store(optimize)
 }
 
 // AddMenuItem adds a menu item with the designated title and tooltip.
