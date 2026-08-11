@@ -399,7 +399,15 @@ void setIcon(const char* iconBytes, int length, bool template) {
   NSData* buffer = [NSData dataWithBytes: iconBytes length:length];
   @autoreleasepool {
     NSImage *image = [[NSImage alloc] initWithData:buffer];
-    [image setSize:NSMakeSize(16, 16)];
+    NSSize src = image.size;
+    if (src.height > 0) {
+      // Fit the icon to the OS-reported menu bar height.
+      CGFloat height = [[NSStatusBar systemStatusBar] thickness];
+      if (height <= 0) {
+        height = 16;
+      }
+      [image setSize:NSMakeSize(src.width * height / src.height, height)];
+    }
     image.template = template;
     runInMainThread(@selector(setIcon:), (id)image);
   }
