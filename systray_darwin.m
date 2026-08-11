@@ -395,14 +395,11 @@ void runInMainThread(SEL method, id object) {
                   waitUntilDone: YES];
 }
 
-void setIcon(const char* iconBytes, int length, int iconHeight, bool template) {
-  if (iconHeight == 0) {
-    iconHeight = 16;
-  }
+void setIcon(const char* iconBytes, int length, bool template) {
   NSData* buffer = [NSData dataWithBytes: iconBytes length:length];
   @autoreleasepool {
     NSImage *image = [[NSImage alloc] initWithData:buffer];
-    [image setSize:NSMakeSize(image.size.width * iconHeight / image.size.height, iconHeight)];
+    [image setSize:NSMakeSize(16, 16)];
     image.template = template;
     runInMainThread(@selector(setIcon:), (id)image);
   }

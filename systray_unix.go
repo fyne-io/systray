@@ -40,15 +40,15 @@ var (
 // to a regular icon on other platforms.
 // templateIconBytes and iconBytes should be the content of .ico for windows and
 // .ico/.jpg/.png for other platforms.
-func SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte, opts ...func(*iconOptions)) {
+func SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte) {
 	// TODO handle the templateIconBytes?
-	SetIcon(regularIconBytes, opts...)
+	SetIcon(regularIconBytes)
 }
 
 // SetIcon sets the systray icon.
 // iconBytes should be the content of .ico for windows and .ico/.jpg/.png
-// for other platforms. Any passed opts are ignored on unix.
-func SetIcon(iconBytes []byte, opts ...func(*iconOptions)) {
+// for other platforms.
+func SetIcon(iconBytes []byte) {
 	instance.lock.Lock()
 	instance.iconData = iconBytes
 	props := instance.props

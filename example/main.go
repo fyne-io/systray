@@ -42,7 +42,7 @@ func onReady() {
 
 	// We can manipulate the systray in other goroutines
 	go func() {
-		systray.SetTemplateIcon(icon.Data, icon.Data, systray.WithHeight(22))
+		systray.SetTemplateIcon(icon.Data, icon.Data)
 		systray.SetTitle("Awesome App")
 		systray.SetTooltip("Pretty awesome棒棒嗒")
 		trayOpenedCount := 0
