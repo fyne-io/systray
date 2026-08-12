@@ -398,6 +398,48 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 				Emit:     prop.EmitTrue,
 				Callback: nil,
 			},
+			// The SNI spec says an item "must provide" all 16 properties,
+			// so we serve the rest with empty defaults even though we don't
+			// otherwise use them. Without this, a host that reads every
+			// property gets an UnknownProperty error, which can crash strict
+			// clients (e.g. Qtile).
+			// https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/StatusNotifierItem/
+			"WindowId": {
+				Value:    int32(0), // 0 means "not interested" per the SNI spec
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"OverlayIconName": {
+				Value:    "",
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"OverlayIconPixmap": {
+				Value:    []PX{},
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"AttentionIconName": {
+				Value:    "",
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"AttentionIconPixmap": {
+				Value:    []PX{},
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"AttentionMovieName": {
+				Value:    "",
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
 		}}
 }
 
