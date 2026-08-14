@@ -398,6 +398,42 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 				Emit:     prop.EmitTrue,
 				Callback: nil,
 			},
+			"WindowId": {
+				Value:    int32(0), // 0 means "not interested" per the SNI spec
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"OverlayIconName": {
+				Value:    "",
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"OverlayIconPixmap": {
+				Value:    []PX{},
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"AttentionIconName": {
+				Value:    "",
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"AttentionIconPixmap": {
+				Value:    []PX{},
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"AttentionMovieName": {
+				Value:    "",
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
 		}}
 }
 
