@@ -119,6 +119,8 @@ func registerSystray() {
 
 func nativeLoop() {
 	C.nativeLoop()
+	// Then exit however we shut down the app.
+	runSystrayExit()
 }
 
 func nativeEnd() {
