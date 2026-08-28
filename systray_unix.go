@@ -272,6 +272,26 @@ func register() bool {
 	return true
 }
 
+// watcherOwnerChanged reports whether the watcher was replaced, and whether the
+// loop must stop. Unrelated signals arrive on the same channel and are skipped.
+func watcherOwnerChanged(sig *dbus.Signal) (reregister, stop bool) {
+	if sig == nil {
+		return false, true
+	}
+
+	if sig.Name != "org.freedesktop.DBus.NameOwnerChanged" || len(sig.Body) < 3 {
+		return false, false
+	}
+
+	if name, ok := sig.Body[0].(string); !ok || name != "org.kde.StatusNotifierWatcher" {
+		return false, false
+	}
+
+	newOwner, ok := sig.Body[2].(string)
+
+	return ok && newOwner != "", false
+}
+
 func stayRegistered() {
 	register()
 
@@ -296,14 +316,16 @@ func stayRegistered() {
 	for {
 		select {
 		case sig := <-sc:
-			if sig == nil {
-				return // We get a nil signal when closing the window.
-			} else if len(sig.Body) < 3 {
-				return // malformed signal?
+			reregister, stop := watcherOwnerChanged(sig)
+			if stop {
+				select {
+				case <-quitChan:
+				default:
+					log.Println("systray error: DBus connection lost, no longer watching for restarts")
+				}
+				return
 			}
-
-			// sig.Body has the args, which are [name old_owner new_owner]
-			if s, ok := sig.Body[2].(string); ok && s != "" {
+			if reregister {
 				register()
 			}
 		case <-quitChan:
