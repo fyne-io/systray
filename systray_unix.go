@@ -34,7 +34,63 @@ var (
 
 	// instance is the current instance of our DBus tray server
 	instance = &tray{menu: &menuLayout{}, menuVersion: 1}
+
+	// iconName and iconThemePath allow setting icon by name (for MATE/GNOME compatibility)
+	iconName      string
+	iconThemePath string
 )
+
+// SetIconName sets the systray icon by name from the icon theme.
+// This is needed for desktop environments (MATE, GNOME) that prefer IconName over IconPixmap.
+func SetIconName(name string) {
+	instance.lock.Lock()
+	iconName = name
+	props := instance.props
+	defer instance.lock.Unlock()
+
+	if props == nil {
+		return
+	}
+
+	props.SetMust("org.kde.StatusNotifierItem", "IconName", iconName)
+
+	conn := instance.conn
+	if conn == nil {
+		return
+	}
+
+	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewIconSignal{
+		Path: path,
+		Body: &notifier.StatusNotifierItem_NewIconSignalBody{},
+	})
+	if err != nil {
+		log.Printf("systray error: failed to emit new icon signal: %s\n", err)
+	}
+}
+
+// SetIconThemePath sets the path to the icon theme directory.
+func SetIconThemePath(themePath string) {
+	instance.lock.Lock()
+	iconThemePath = themePath
+	props := instance.props
+	defer instance.lock.Unlock()
+
+	if props == nil {
+		return
+	}
+
+	props.SetMust("org.kde.StatusNotifierItem", "IconThemePath", iconThemePath)
+}
+
+// iconPixmapValue returns the IconPixmap property value.
+// If iconData is empty, it returns an empty array to allow fallback to IconName;
+// otherwise, it returns the converted pixel data.
+func iconPixmapValue(iconData []byte) []PX {
+	if len(iconData) == 0 {
+		return []PX{}
+	}
+	return []PX{convertToPixels(iconData)}
+}
 
 // SetTemplateIcon sets the systray icon as a template icon (on macOS), falling back
 // to a regular icon on other platforms.
@@ -363,20 +419,20 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 				Callback: nil,
 			},
 			"IconName": {
-				Value:    "",
-				Writable: false,
+				Value:    iconName,
+				Writable: true,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
 			},
 			"IconPixmap": {
-				Value:    []PX{convertToPixels(t.iconData)},
+				Value:    iconPixmapValue(t.iconData),
 				Writable: true,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
 			},
 			"IconThemePath": {
-				Value:    "",
-				Writable: false,
+				Value:    iconThemePath,
+				Writable: true,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
 			},
