@@ -168,11 +168,6 @@ withShortcutMods: (unsigned int)theShortcutMods
   systray_left_click();
 }
 
-- (void)applicationWillTerminate:(NSNotification *)aNotification
-{
-  systray_on_exit();
-}
-
 - (void)setRemovalAllowed {
   NSStatusItemBehavior behavior = [self->statusItem behavior];
   behavior |= NSStatusItemBehaviorRemovalAllowed;
