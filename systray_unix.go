@@ -35,7 +35,63 @@ var (
 
 	// instance is the current instance of our DBus tray server
 	instance = &tray{menu: &menuLayout{}, menuVersion: atomic.Uint32{}}
+
+	// iconName and iconThemePath allow setting icon by name (for MATE/GNOME compatibility)
+	iconName      string
+	iconThemePath string
 )
+
+// SetIconName sets the systray icon by name from the icon theme.
+// This is needed for desktop environments (MATE, GNOME) that prefer IconName over IconPixmap.
+func SetIconName(name string) {
+	instance.lock.Lock()
+	iconName = name
+	props := instance.props
+	defer instance.lock.Unlock()
+
+	if props == nil {
+		return
+	}
+
+	props.SetMust("org.kde.StatusNotifierItem", "IconName", iconName)
+
+	conn := instance.conn
+	if conn == nil {
+		return
+	}
+
+	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewIconSignal{
+		Path: path,
+		Body: &notifier.StatusNotifierItem_NewIconSignalBody{},
+	})
+	if err != nil {
+		log.Printf("systray error: failed to emit new icon signal: %s\n", err)
+	}
+}
+
+// SetIconThemePath sets the path to the icon theme directory.
+func SetIconThemePath(themePath string) {
+	instance.lock.Lock()
+	iconThemePath = themePath
+	props := instance.props
+	defer instance.lock.Unlock()
+
+	if props == nil {
+		return
+	}
+
+	props.SetMust("org.kde.StatusNotifierItem", "IconThemePath", iconThemePath)
+}
+
+// iconPixmapValue returns the IconPixmap property value.
+// If iconData is empty, it returns an empty array to allow fallback to IconName;
+// otherwise, it returns the converted pixel data.
+func iconPixmapValue(iconData []byte) []PX {
+	if len(iconData) == 0 {
+		return []PX{}
+	}
+	return []PX{convertToPixels(iconData)}
+}
 
 // SetTemplateIcon sets the systray icon as a template icon (on macOS), falling back
 // to a regular icon on other platforms.
@@ -76,31 +132,43 @@ func SetIcon(iconBytes []byte) {
 	}
 }
 
-// SetIconName sets the systray icon name or path.
-func SetIconName(iconName string) {
-	instance.lock.Lock()
-	instance.iconName = iconName
-	props := instance.props
-	conn := instance.conn
-	defer instance.lock.Unlock()
+// TODO/FIXME: merge candidate, in case another on fails
+// // SetIconName sets the systray icon name or path.
+// func SetIconName(iconName string) {
+// 	instance.lock.Lock()
+// 	instance.iconName = iconName
+// 	props := instance.props
+// 	conn := instance.conn
+// 	defer instance.lock.Unlock()
 
-	if props == nil {
-		return
-	}
+// 	if props == nil {
+// 		return
+// 	}
 
-	props.SetMust("org.kde.StatusNotifierItem", "IconName", iconName)
-	if conn == nil {
-		return
-	}
+// 	props.SetMust("org.kde.StatusNotifierItem", "IconName", iconName)
+// 	if conn == nil {
+// 		return
+// 	}
 
-	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewIconSignal{
-		Path: path,
-		Body: &notifier.StatusNotifierItem_NewIconSignalBody{},
-	})
+// 	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewIconSignal{
+// 		Path: path,
+// 		Body: &notifier.StatusNotifierItem_NewIconSignalBody{},
+// 	})
+// 	if err != nil {
+// 		log.Printf("systray error: failed to emit new icon signal: %s\n", err)
+// 		return
+// 	}
+// }
+
+// SetIconFromFilePath sets the systray icon from a file path.
+// iconFilePath should be the path to a .ico for windows and .ico/.jpg/.png for other platforms.
+func SetIconFromFilePath(iconFilePath string) error {
+	bytes, err := os.ReadFile(iconFilePath)
 	if err != nil {
-		log.Printf("systray error: failed to emit new icon signal: %s\n", err)
-		return
+		return fmt.Errorf("failed to read icon file: %v", err)
 	}
+	SetIcon(bytes)
+	return nil
 }
 
 // SetTitle sets the systray title, only available on Mac and Linux.
@@ -141,6 +209,7 @@ func SetTooltip(tooltipTitle string) {
 	instance.lock.Lock()
 	instance.tooltipTitle = tooltipTitle
 	props := instance.props
+	conn := instance.conn
 	defer instance.lock.Unlock()
 
 	if props == nil {
@@ -150,6 +219,19 @@ func SetTooltip(tooltipTitle string) {
 		dbus.MakeVariant(tooltip{V2: tooltipTitle}))
 	if dbusErr != nil {
 		log.Printf("systray error: failed to set ToolTip prop: %s\n", dbusErr)
+		return
+	}
+
+	if conn == nil {
+		return
+	}
+
+	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewToolTipSignal{
+		Path: path,
+		Body: &notifier.StatusNotifierItem_NewToolTipSignalBody{},
+	})
+	if err != nil {
+		log.Printf("systray error: failed to emit new tooltip signal: %s\n", err)
 		return
 	}
 }
@@ -254,6 +336,11 @@ func IsAvailable() bool {
 	return resp.Value().(bool)
 }
 
+// SetRemovalAllowed sets whether a user can remove the systray icon or not.
+// This is only supported on macOS.
+func SetRemovalAllowed(allowed bool) {
+}
+
 func setInternalLoop(_ bool) {
 	// nothing to action on Linux
 }
@@ -270,7 +357,9 @@ func nativeLoop() int {
 
 func nativeEnd() {
 	runSystrayExit()
-	instance.conn.Close()
+	if conn := instance.conn; conn != nil {
+		conn.Close()
+	}
 }
 
 func quit() {
@@ -284,7 +373,7 @@ func nativeStart() {
 		log.Printf("systray error: failed to connect to DBus: %v\n", err)
 		return
 	}
-	err = notifier.ExportStatusNotifierItem(conn, path, &notifier.UnimplementedStatusNotifierItem{})
+	err = notifier.ExportStatusNotifierItem(conn, path, newLeftRightNotifierItem())
 	if err != nil {
 		log.Printf("systray error: failed to export status notifier item: %v\n", err)
 	}
@@ -452,25 +541,25 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 				Callback: nil,
 			},
 			"IconName": {
-				Value:    t.iconName,
+				Value:    iconName,
 				Writable: true,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
 			},
 			"IconPixmap": {
-				Value:    []PX{convertToPixels(t.iconData)},
+				Value:    iconPixmapValue(t.iconData),
 				Writable: true,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
 			},
 			"IconThemePath": {
-				Value:    "",
-				Writable: false,
+				Value:    iconThemePath,
+				Writable: true,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
 			},
 			"ItemIsMenu": {
-				Value:    true,
+				Value:    tappedLeft == nil && tappedRight == nil,
 				Writable: false,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
@@ -484,6 +573,42 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 			"ToolTip": {
 				Value:    tooltip{V2: t.tooltipTitle},
 				Writable: true,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"WindowId": {
+				Value:    int32(0), // 0 means "not interested" per the SNI spec
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"OverlayIconName": {
+				Value:    "",
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"OverlayIconPixmap": {
+				Value:    []PX{},
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"AttentionIconName": {
+				Value:    "",
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"AttentionIconPixmap": {
+				Value:    []PX{},
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: nil,
+			},
+			"AttentionMovieName": {
+				Value:    "",
+				Writable: false,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
 			},

@@ -79,7 +79,7 @@ cd systray/example
 go run .
 ```
 
-On Windows, you should follow the instructions above, but use the followign run command:
+On Windows, you should follow the instructions above, but use the following run command:
 
 ```
 go run -ldflags "-H=windowsgui" .
@@ -134,6 +134,11 @@ If bundling manually, you may want to add one or both of the following to your I
 ```
 
 Consult the [Official Apple Documentation here](https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/BundleTypes/BundleTypes.html#//apple_ref/doc/uid/10000123i-CH101-SW1).
+
+On macOS, it's possible to set the underlying
+[`NSStatusItemBehavior`](https://developer.apple.com/documentation/appkit/nsstatusitembehavior?language=objc)
+with `systray.SetRemovalAllowed(true)`. When enabled, the user can cmd-drag the
+icon off the menu bar.
 
 ## Credits
 

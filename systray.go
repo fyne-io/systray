@@ -10,17 +10,16 @@ import (
 )
 
 var (
-	systrayReady      func()
-	systrayExit       func()
-	systrayExitCalled bool
-	menuItems         = make(map[uint32]*MenuItem)
-	menuItemsLock     sync.RWMutex
+	systrayReady, systrayExit func()
+	tappedLeft, tappedRight   func()
+	systrayExitCalled         bool
+	menuItems                 = make(map[uint32]*MenuItem)
+	menuItemsLock             sync.RWMutex
 
-	currentID atomic.Uint32
-	quitOnce  sync.Once
-)
+	initialMenuBuilt sync.WaitGroup
+	currentID        atomic.Uint32
+	quitOnce         sync.Once
 
-var (
 	// TrayOpenedCh is the channel which will be notified when system tray is shown. Only works on Linux and Windows.
 	TrayOpenedCh = make(chan struct{})
 
@@ -70,6 +69,21 @@ func AddSeparator() *Separator {
 	}
 }
 
+// KeyModifier is a bit mask of the modifier keys that form part of a menu item shortcut.
+type KeyModifier int
+
+const (
+	// KeyModifierShift represents the "Shift" key.
+	KeyModifierShift KeyModifier = 1 << iota
+	// KeyModifierControl represents the "Control" key.
+	KeyModifierControl
+	// KeyModifierAlt represents the "Alt" key (also known as "Option" on macOS).
+	KeyModifierAlt
+	// KeyModifierSuper represents the "Super" key (also known as "Command" on macOS
+	// and "Windows" on Microsoft Windows).
+	KeyModifierSuper
+)
+
 // MenuItem is used to keep track each menu item of systray.
 // Don't create it directly, use the one systray.AddMenuItem() returned
 type MenuItem struct {
@@ -88,6 +102,10 @@ type MenuItem struct {
 	checked bool
 	// has the menu item a checkbox (Linux)
 	isCheckable bool
+	// shortcutKey is the key of the keyboard shortcut for this item, if any
+	shortcutKey string
+	// shortcutMods are the modifier keys of the keyboard shortcut for this item
+	shortcutMods KeyModifier
 	// parent item, for sub menus
 	parent *MenuItem
 }
@@ -101,7 +119,7 @@ func (item *MenuItem) String() string {
 
 // newMenuItem returns a populated MenuItem object
 func newMenuItem(title string, tooltip string, parent *MenuItem) *MenuItem {
-	return &MenuItem{
+	item := &MenuItem{
 		ClickedCh:   make(chan struct{}),
 		id:          currentID.Add(1),
 		title:       title,
@@ -111,6 +129,12 @@ func newMenuItem(title string, tooltip string, parent *MenuItem) *MenuItem {
 		isCheckable: false,
 		parent:      parent,
 	}
+
+	menuItemsLock.Lock()
+	menuItems[item.id] = item
+	menuItemsLock.Unlock()
+
+	return item
 }
 
 // Run initializes GUI and starts the event loop, then invokes the onReady
@@ -122,7 +146,7 @@ func Run(onReady, onExit func()) {
 	nativeLoop()
 }
 
-// RunWithExternalLoop allows the systemtray module to operate with other tookits.
+// RunWithExternalLoop allows the system tray module to operate with other toolkits.
 // The returned start and end functions should be called by the toolkit when the application has started and will end.
 func RunWithExternalLoop(onReady, onExit func()) (start, end func()) {
 	Register(onReady, onExit)
@@ -144,9 +168,11 @@ func Register(onReady func(), onExit func()) {
 	} else {
 		// Run onReady on separate goroutine to avoid blocking event loop
 		readyCh := make(chan interface{})
+		initialMenuBuilt.Add(1)
 		go func() {
 			<-readyCh
 			onReady()
+			initialMenuBuilt.Done()
 		}()
 		systrayReady = func() {
 			close(readyCh)
@@ -165,12 +191,18 @@ func Register(onReady func(), onExit func()) {
 // ResetMenu will remove all menu items
 func ResetMenu() {
 	menuItemsLock.Lock()
-	for id, item := range menuItems {
-		item.close()
-		delete(menuItems, id)
+	id := currentID.Load()
+	items := make([]*MenuItem, 0, len(menuItems))
+	for _, item := range menuItems {
+		items = append(items, item)
+	}
+	menuItemsLock.Unlock()
+	for _, item := range items {
+		if item.id <= id && item.parent == nil {
+			item.Remove()
+		}
 	}
 	resetMenu()
-	menuItemsLock.Unlock()
 }
 
 // Refresh will emit the current menu to the system
@@ -181,6 +213,14 @@ func Refresh() {
 // Quit the systray
 func Quit() {
 	quitOnce.Do(quit)
+}
+
+func SetOnTapped(f func()) {
+	tappedLeft = f
+}
+
+func SetOnSecondaryTapped(f func()) {
+	tappedRight = f
 }
 
 // AddMenuItem adds a menu item with the designated title and tooltip.
@@ -264,6 +304,26 @@ func (item *MenuItem) SetTooltip(tooltip string) {
 	item.update()
 }
 
+// SetShortcut sets the keyboard shortcut that will be displayed alongside this menu item.
+// The key should be a single character such as "S" or one of the named keys understood by
+// all platforms, namely "BackSpace", "Delete", "Down", "End", "Enter", "Escape", "F1" to "F12",
+// "Home", "Insert", "Left", "PageDown", "PageUp", "Return", "Right", "Space", "Tab" and "Up".
+// Passing an empty key removes any shortcut previously set.
+//
+// On macOS the shortcut will also be registered so it can trigger the item, on Linux and
+// Windows it is presented next to the item label but not handled by the system tray.
+func (item *MenuItem) SetShortcut(mods KeyModifier, key string) {
+	item.shortcutMods = mods
+	item.shortcutKey = key
+	item.update()
+}
+
+// Shortcut returns the modifiers and key of the keyboard shortcut for this menu item.
+// An empty key means that no shortcut is set.
+func (item *MenuItem) Shortcut() (mods KeyModifier, key string) {
+	return item.shortcutMods, item.shortcutKey
+}
+
 // Disabled checks if the menu item is disabled
 func (item *MenuItem) Disabled() bool {
 	return item.disabled
@@ -288,10 +348,32 @@ func (item *MenuItem) Hide() {
 
 // Remove removes a menu item
 func (item *MenuItem) Remove() {
+	menuItemsLock.RLock()
+	var childList []*MenuItem
+	for _, child := range menuItems {
+		if child.parent == item {
+			childList = append(childList, child)
+		}
+	}
+	menuItemsLock.RUnlock()
+	for _, child := range childList {
+		child.Remove()
+	}
 	removeMenuItem(item)
 	menuItemsLock.Lock()
+	defer menuItemsLock.Unlock()
 	delete(menuItems, item.id)
-	menuItemsLock.Unlock()
+	if item.ClickedCh == nil {
+		return
+	}
+	select {
+	case _, ok := <-item.ClickedCh:
+		if !ok {
+			return
+		}
+	default:
+	}
+	close(item.ClickedCh)
 }
 
 // Show shows a previously hidden menu item
@@ -319,8 +401,12 @@ func (item *MenuItem) Uncheck() {
 // update propagates changes on a menu item to systray
 func (item *MenuItem) update() {
 	menuItemsLock.Lock()
-	menuItems[item.id] = item
+	_, exists := menuItems[item.id]
 	menuItemsLock.Unlock()
+
+	if !exists {
+		return
+	}
 	addOrUpdateMenuItem(item)
 }
 

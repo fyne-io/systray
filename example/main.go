@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/NordSecurity/systray"
@@ -15,18 +16,17 @@ func main() {
 	}
 
 	systray.Run(onReady, onExit)
+	fmt.Println("Finished quitting")
 }
 
 func addQuitItem() {
 	mQuit := systray.AddMenuItem("Quit", "Quit the whole app")
-	mQuit.Enable()
 	go func() {
-		<-mQuit.ClickedCh
-		fmt.Println("Requesting quit")
-		systray.Quit()
-		fmt.Println("Finished quitting")
+		for range mQuit.ClickedCh {
+			fmt.Println("Requesting quit")
+			systray.Quit()
+		}
 	}()
-	systray.AddSeparator()
 }
 
 func onReady() {
@@ -34,6 +34,11 @@ func onReady() {
 	systray.SetTitle("Awesome App")
 	systray.SetTooltip("Lantern")
 	addQuitItem()
+	systray.AddSeparator()
+
+	systray.SetOnSecondaryTapped(func() {
+		log.Println("Custom right click!")
+	})
 
 	// We can manipulate the systray in other goroutines
 	go func() {
@@ -43,6 +48,7 @@ func onReady() {
 		trayOpenedCount := 0
 		mOpenedCount := systray.AddMenuItem("Tray opened count", "Tray opened count")
 		mChange := systray.AddMenuItem("Change Me", "Change Me")
+		mAllowRemoval := systray.AddMenuItem("Allow removal", "macOS only: allow removal of the icon when cmd is pressed")
 		mChecked := systray.AddMenuItemCheckbox("Checked", "Check Me", true)
 		mEnabled := systray.AddMenuItem("Enabled", "Enabled")
 		// Sets the icon of a menu item. Only available on Mac.
@@ -74,11 +80,13 @@ func onReady() {
 		}
 		mReset := systray.AddMenuItem("Reset", "Reset all items")
 
-		for {
-			select {
-			case <-mChange.ClickedCh:
+		go func() {
+			for range mChange.ClickedCh {
 				mChange.SetTitle("I've Changed")
-			case <-mChecked.ClickedCh:
+			}
+		}()
+		go func() {
+			for range mChecked.ClickedCh {
 				if mChecked.Checked() {
 					mChecked.Uncheck()
 					mChecked.SetTitle("Unchecked")
@@ -86,22 +94,50 @@ func onReady() {
 					mChecked.Check()
 					mChecked.SetTitle("Checked")
 				}
-			case <-mEnabled.ClickedCh:
+			}
+		}()
+		go func() {
+			for range mAllowRemoval.ClickedCh {
+				systray.SetRemovalAllowed(true)
+				go func() {
+					time.Sleep(5 * time.Second)
+					fmt.Printf("Time's up! setting back to no-removal-allowed on macOS.\n")
+					systray.SetRemovalAllowed(false)
+				}()
+			}
+		}()
+		go func() {
+			for range mEnabled.ClickedCh {
 				mEnabled.SetTitle("Disabled")
 				mEnabled.Disable()
-			case <-subMenuBottom2.ClickedCh:
+			}
+		}()
+		go func() {
+			for range subMenuBottom2.ClickedCh {
 				panic("panic button pressed")
-			case <-subMenuBottom.ClickedCh:
+			}
+		}()
+		go func() {
+			for range subMenuBottom.ClickedCh {
 				toggle()
-			case <-mReset.ClickedCh:
+			}
+		}()
+		go func() {
+			for range mReset.ClickedCh {
 				systray.ResetMenu()
 				addQuitItem()
-			case <-mToggle.ClickedCh:
+			}
+		}()
+		go func() {
+			for range mToggle.ClickedCh {
 				toggle()
-			case <-systray.TrayOpenedCh:
+			}
+		}()
+		go func() {
+			for range systray.TrayOpenedCh {
 				trayOpenedCount++
 				mOpenedCount.SetTitle(fmt.Sprintf("Tray opened count: %d", trayOpenedCount))
 			}
-		}
+		}()
 	}()
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 )
@@ -35,6 +34,7 @@ var (
 			{Name: "NewIcon"},
 			{Name: "NewAttentionIcon"},
 			{Name: "NewOverlayIcon"},
+			{Name: "NewToolTip"},
 			{Name: "NewStatus", Args: []introspect.Arg{
 				{Name: "status", Type: "s", Direction: ""},
 			}},
@@ -95,30 +95,54 @@ var ErrUnknownSignal = errors.New("unknown signal")
 func LookupSignal(signal *dbus.Signal) (Signal, error) {
 	switch signal.Name {
 	case InterfaceStatusNotifierItem + "." + "NewTitle":
+		if len(signal.Body) < 0 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 0", len(signal.Body))
+		}
 		return &StatusNotifierItem_NewTitleSignal{
 			sender: signal.Sender,
 			Path:   signal.Path,
 			Body:   &StatusNotifierItem_NewTitleSignalBody{},
 		}, nil
 	case InterfaceStatusNotifierItem + "." + "NewIcon":
+		if len(signal.Body) < 0 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 0", len(signal.Body))
+		}
 		return &StatusNotifierItem_NewIconSignal{
 			sender: signal.Sender,
 			Path:   signal.Path,
 			Body:   &StatusNotifierItem_NewIconSignalBody{},
 		}, nil
 	case InterfaceStatusNotifierItem + "." + "NewAttentionIcon":
+		if len(signal.Body) < 0 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 0", len(signal.Body))
+		}
 		return &StatusNotifierItem_NewAttentionIconSignal{
 			sender: signal.Sender,
 			Path:   signal.Path,
 			Body:   &StatusNotifierItem_NewAttentionIconSignalBody{},
 		}, nil
 	case InterfaceStatusNotifierItem + "." + "NewOverlayIcon":
+		if len(signal.Body) < 0 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 0", len(signal.Body))
+		}
 		return &StatusNotifierItem_NewOverlayIconSignal{
 			sender: signal.Sender,
 			Path:   signal.Path,
 			Body:   &StatusNotifierItem_NewOverlayIconSignalBody{},
 		}, nil
+	case InterfaceStatusNotifierItem + "." + "NewToolTip":
+		if len(signal.Body) < 0 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 0", len(signal.Body))
+		}
+		return &StatusNotifierItem_NewToolTipSignal{
+			sender: signal.Sender,
+			Path:   signal.Path,
+			Body:   &StatusNotifierItem_NewToolTipSignalBody{},
+		}, nil
 	case InterfaceStatusNotifierItem + "." + "NewStatus":
+		if len(signal.Body) < 1 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 1", len(signal.Body))
+		}
 		v0, ok := signal.Body[0].(string)
 		if !ok {
 			return nil, fmt.Errorf("prop .Status is %T, not string", signal.Body[0])
@@ -131,6 +155,9 @@ func LookupSignal(signal *dbus.Signal) (Signal, error) {
 			},
 		}, nil
 	case InterfaceStatusNotifierItem + "." + "NewIconThemePath":
+		if len(signal.Body) < 1 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 1", len(signal.Body))
+		}
 		v0, ok := signal.Body[0].(string)
 		if !ok {
 			return nil, fmt.Errorf("prop .IconThemePath is %T, not string", signal.Body[0])
@@ -143,6 +170,9 @@ func LookupSignal(signal *dbus.Signal) (Signal, error) {
 			},
 		}, nil
 	case InterfaceStatusNotifierItem + "." + "NewMenu":
+		if len(signal.Body) < 0 {
+			return nil, fmt.Errorf("signal has %v args rather than the expected 0", len(signal.Body))
+		}
 		return &StatusNotifierItem_NewMenuSignal{
 			sender: signal.Sender,
 			Path:   signal.Path,
@@ -320,7 +350,8 @@ func (o *StatusNotifierItem) GetIconName(ctx context.Context) (iconName string, 
 // GetIconPixmap gets org.kde.StatusNotifierItem.IconPixmap property.
 //
 // Annotations:
-//   @org.qtproject.QtDBus.QtTypeName = KDbusImageVector
+//
+//	@org.qtproject.QtDBus.QtTypeName = KDbusImageVector
 func (o *StatusNotifierItem) GetIconPixmap(ctx context.Context) (iconPixmap []struct {
 	V0 int32
 	V1 int32
@@ -339,7 +370,8 @@ func (o *StatusNotifierItem) GetOverlayIconName(ctx context.Context) (overlayIco
 // GetOverlayIconPixmap gets org.kde.StatusNotifierItem.OverlayIconPixmap property.
 //
 // Annotations:
-//   @org.qtproject.QtDBus.QtTypeName = KDbusImageVector
+//
+//	@org.qtproject.QtDBus.QtTypeName = KDbusImageVector
 func (o *StatusNotifierItem) GetOverlayIconPixmap(ctx context.Context) (overlayIconPixmap []struct {
 	V0 int32
 	V1 int32
@@ -358,7 +390,8 @@ func (o *StatusNotifierItem) GetAttentionIconName(ctx context.Context) (attentio
 // GetAttentionIconPixmap gets org.kde.StatusNotifierItem.AttentionIconPixmap property.
 //
 // Annotations:
-//   @org.qtproject.QtDBus.QtTypeName = KDbusImageVector
+//
+//	@org.qtproject.QtDBus.QtTypeName = KDbusImageVector
 func (o *StatusNotifierItem) GetAttentionIconPixmap(ctx context.Context) (attentionIconPixmap []struct {
 	V0 int32
 	V1 int32
@@ -377,7 +410,8 @@ func (o *StatusNotifierItem) GetAttentionMovieName(ctx context.Context) (attenti
 // GetToolTip gets org.kde.StatusNotifierItem.ToolTip property.
 //
 // Annotations:
-//   @org.qtproject.QtDBus.QtTypeName = KDbusToolTipStruct
+//
+//	@org.qtproject.QtDBus.QtTypeName = KDbusToolTipStruct
 func (o *StatusNotifierItem) GetToolTip(ctx context.Context) (toolTip struct {
 	V0 string
 	V1 []struct {
@@ -526,6 +560,40 @@ func (s *StatusNotifierItem_NewOverlayIconSignal) values() []interface{} {
 
 // StatusNotifierItem_NewOverlayIconSignalBody is body container.
 type StatusNotifierItem_NewOverlayIconSignalBody struct {
+}
+
+// StatusNotifierItem_NewToolTipSignal represents org.kde.StatusNotifierItem.NewToolTip signal.
+type StatusNotifierItem_NewToolTipSignal struct {
+	sender string
+	Path   dbus.ObjectPath
+	Body   *StatusNotifierItem_NewToolTipSignalBody
+}
+
+// Name returns the signal's name.
+func (s *StatusNotifierItem_NewToolTipSignal) Name() string {
+	return "NewToolTip"
+}
+
+// Interface returns the signal's interface.
+func (s *StatusNotifierItem_NewToolTipSignal) Interface() string {
+	return InterfaceStatusNotifierItem
+}
+
+// Sender returns the signal's sender unique name.
+func (s *StatusNotifierItem_NewToolTipSignal) Sender() string {
+	return s.sender
+}
+
+func (s *StatusNotifierItem_NewToolTipSignal) path() dbus.ObjectPath {
+	return s.Path
+}
+
+func (s *StatusNotifierItem_NewToolTipSignal) values() []interface{} {
+	return []interface{}{}
+}
+
+// StatusNotifierItem_NewToolTipSignalBody is body container.
+type StatusNotifierItem_NewToolTipSignalBody struct {
 }
 
 // StatusNotifierItem_NewStatusSignal represents org.kde.StatusNotifierItem.NewStatus signal.

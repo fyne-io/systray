@@ -6,11 +6,13 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -325,13 +327,18 @@ func (t *winTray) wndProc(hWnd windows.Handle, message uint32, wParam, lParam ui
 		runSystrayExit()
 	case t.wmSystrayMessage:
 		switch lParam {
-		case WM_RBUTTONUP, WM_LBUTTONUP:
+		case WM_LBUTTONUP:
 			select {
 			case TrayOpenedCh <- struct{}{}:
 			default:
 			}
-
-			t.showMenu()
+			systrayLeftClick()
+		case WM_RBUTTONUP:
+			select {
+			case TrayOpenedCh <- struct{}{}:
+			default:
+			}
+			systrayRightClick()
 		}
 	case t.wmTaskbarCreated: // on explorer.exe restarts
 		t.muNID.Lock()
@@ -541,9 +548,61 @@ func (t *winTray) convertToSubMenu(menuItemId uint32) (windows.Handle, error) {
 	return menu, nil
 }
 
-func (t *winTray) addOrUpdateMenuItem(menuItemId uint32, parentId uint32, title string, disabled, checked bool) error {
+// SetRemovalAllowed sets whether a user can remove the systray icon or not.
+// This is only supported on macOS.
+func SetRemovalAllowed(allowed bool) {
+}
+
+// winKeyNames maps the platform neutral key names used by SetShortcut to the names
+// that are commonly presented in Windows menus.
+var winKeyNames = map[string]string{
+	"BackSpace": "Backspace",
+	"Delete":    "Del",
+	"Enter":     "Enter",
+	"Escape":    "Esc",
+	"Insert":    "Ins",
+	"PageDown":  "PgDn",
+	"PageUp":    "PgUp",
+	"Return":    "Enter",
+}
+
+// shortcutText returns the accelerator text presented after the item label,
+// for example "Ctrl+Shift+S". It is empty if the item has no shortcut.
+func (item *MenuItem) shortcutText() string {
+	if item.shortcutKey == "" {
+		return ""
+	}
+
+	b := strings.Builder{}
+	if item.shortcutMods&KeyModifierControl != 0 {
+		b.WriteString("Ctrl+")
+	}
+	if item.shortcutMods&KeyModifierAlt != 0 {
+		b.WriteString("Alt+")
+	}
+	if item.shortcutMods&KeyModifierShift != 0 {
+		b.WriteString("Shift+")
+	}
+	if item.shortcutMods&KeyModifierSuper != 0 {
+		b.WriteString("Win+")
+	}
+
+	if key, ok := winKeyNames[item.shortcutKey]; ok {
+		b.WriteString(key)
+	} else {
+		b.WriteString(strings.ToUpper(item.shortcutKey))
+	}
+	return b.String()
+}
+
+func (t *winTray) addOrUpdateMenuItem(menuItemId uint32, parentId uint32, title, shortcut string, disabled, checked bool) error {
 	if !wt.isReady() {
 		return ErrTrayNotReadyYet
+	}
+
+	if shortcut != "" {
+		// Windows right aligns any text that follows a tab character in a menu item
+		title += "\t" + shortcut
 	}
 
 	// https://msdn.microsoft.com/en-us/library/windows/desktop/ms647578(v=vs.85).aspx
@@ -994,6 +1053,16 @@ func SetIcon(iconBytes []byte) {
 	}
 }
 
+// SetIconFromFilePath sets the systray icon from a file path.
+// iconFilePath should be the path to a .ico for windows and .ico/.jpg/.png for other platforms.
+func SetIconFromFilePath(iconFilePath string) error {
+	err := wt.setIcon(iconFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to set icon: %v", err)
+	}
+	return nil
+}
+
 // SetTemplateIcon sets the systray icon as a template icon (on macOS), falling back
 // to a regular icon on other platforms.
 // templateIconBytes and iconBytes should be the content of .ico for windows and
@@ -1023,26 +1092,34 @@ func (item *MenuItem) SetIcon(iconBytes []byte) {
 		return
 	}
 
+	err = item.SetIconFromFilePath(iconFilePath)
+	if err != nil {
+		log.Printf("systray error: %s\n", err)
+		return
+	}
+}
+
+// SetIconFromFilePath sets the icon of a menu item from a file path.
+// iconFilePath should be the path to a .ico for windows and .ico/.jpg/.png for other platforms.
+func (item *MenuItem) SetIconFromFilePath(iconFilePath string) error {
 	h, err := wt.loadIconFrom(iconFilePath)
 	if err != nil {
-		log.Printf("systray error: unable to load icon from temp file: %s\n", err)
-		return
+		return fmt.Errorf("unable to load icon from file: %s", err)
 	}
 
 	h, err = iconToBitmap(h)
 	if err != nil {
-		log.Printf("systray error: unable to convert icon to bitmap: %s\n", err)
-		return
+		return fmt.Errorf("unable to convert icon to bitmap: %s", err)
 	}
 	wt.muMenuItemIcons.Lock()
 	wt.menuItemIcons[uint32(item.id)] = h
 	wt.muMenuItemIcons.Unlock()
 
-	err = wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.disabled, item.checked)
+	err = wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.shortcutText(), item.disabled, item.checked)
 	if err != nil {
-		log.Printf("systray error: unable to addOrUpdateMenuItem: %s\n", err)
-		return
+		return fmt.Errorf("unable to addOrUpdateMenuItem: %s", err)
 	}
+	return nil
 }
 
 // SetTooltip sets the systray tooltip to display on mouse hover of the tray icon,
@@ -1055,7 +1132,7 @@ func SetTooltip(tooltip string) {
 }
 
 func addOrUpdateMenuItem(item *MenuItem) {
-	err := wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.disabled, item.checked)
+	err := wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.shortcutText(), item.disabled, item.checked)
 	if err != nil {
 		log.Printf("systray error: unable to addOrUpdateMenuItem: %s\n", err)
 		return
@@ -1105,4 +1182,34 @@ func resetMenu() {
 	wt.menuOf = make(map[uint32]windows.Handle)
 	wt.menuItemIcons = make(map[uint32]windows.Handle)
 	wt.createMenu()
+}
+
+func systrayLeftClick() {
+	if fn := tappedLeft; fn != nil {
+		fn()
+		return
+	}
+
+	wt.showMenu()
+}
+
+func systrayRightClick() {
+	if fn := tappedRight; fn != nil {
+		fn()
+		return
+	}
+
+	wt.showMenu()
+}
+
+func refresh() {
+}
+
+func addOrUpdateMenuItemQuiet(item *MenuItem) {
+}
+
+func changeSeparatorVisibility(id uint32, visible bool) {
+}
+
+func removeSeparator(id uint32) {
 }

@@ -15,6 +15,12 @@
 
 #endif
 
+// The modifier bits used by the Go API, converted to NSEventModifierFlags below.
+#define SYSTRAY_MOD_SHIFT   (1 << 0)
+#define SYSTRAY_MOD_CONTROL (1 << 1)
+#define SYSTRAY_MOD_ALT     (1 << 2)
+#define SYSTRAY_MOD_SUPER   (1 << 3)
+
 @interface MenuItem : NSObject
 {
   @public
@@ -22,6 +28,8 @@
     NSNumber* parentMenuId;
     NSString* title;
     NSString* tooltip;
+    NSString* shortcutKey;
+    NSEventModifierFlags shortcutMods;
     short disabled;
     short checked;
 }
@@ -29,6 +37,8 @@
 withParentMenuId: (int)theParentMenuId
        withTitle: (const char*)theTitle
      withTooltip: (const char*)theTooltip
+ withShortcutKey: (const char*)theShortcutKey
+withShortcutMods: (unsigned int)theShortcutMods
     withDisabled: (short)theDisabled
      withChecked: (short)theChecked;
      @end
@@ -37,6 +47,8 @@ withParentMenuId: (int)theParentMenuId
      withParentMenuId: (int)theParentMenuId
             withTitle: (const char*)theTitle
           withTooltip: (const char*)theTooltip
+      withShortcutKey: (const char*)theShortcutKey
+     withShortcutMods: (unsigned int)theShortcutMods
          withDisabled: (short)theDisabled
           withChecked: (short)theChecked
 {
@@ -46,19 +58,54 @@ withParentMenuId: (int)theParentMenuId
                                    encoding:NSUTF8StringEncoding];
   tooltip = [[NSString alloc] initWithCString:theTooltip
                                      encoding:NSUTF8StringEncoding];
+  shortcutKey = [[NSString alloc] initWithCString:theShortcutKey
+                                         encoding:NSUTF8StringEncoding];
+  shortcutMods = 0;
+  if (theShortcutMods & SYSTRAY_MOD_SHIFT) {
+    shortcutMods |= NSEventModifierFlagShift;
+  }
+  if (theShortcutMods & SYSTRAY_MOD_CONTROL) {
+    shortcutMods |= NSEventModifierFlagControl;
+  }
+  if (theShortcutMods & SYSTRAY_MOD_ALT) {
+    shortcutMods |= NSEventModifierFlagOption;
+  }
+  if (theShortcutMods & SYSTRAY_MOD_SUPER) {
+    shortcutMods |= NSEventModifierFlagCommand;
+  }
   disabled = theDisabled;
   checked = theChecked;
   return self;
 }
 @end
 
-@interface AppDelegate: NSObject <NSApplicationDelegate>
+@interface RightClickDetector : NSView
+
+@property (copy) void (^onRightClicked)(NSEvent *);
+
+@end
+
+@implementation RightClickDetector
+
+- (void)rightMouseUp:(NSEvent *)theEvent {
+  if (!self.onRightClicked) {
+    return;
+  }
+
+  self.onRightClicked(theEvent);
+}
+
+@end
+
+
+@interface SystrayAppDelegate: NSObject <NSApplicationDelegate, NSMenuDelegate>
   - (void) add_or_update_menu_item:(MenuItem*) item;
   - (IBAction)menuHandler:(id)sender;
+  - (void)menuWillOpen:(NSMenu*)menu;
   @property (assign) IBOutlet NSWindow *window;
-  @end
+@end
 
-  @implementation AppDelegate
+@implementation SystrayAppDelegate
 {
   NSStatusItem *statusItem;
   NSMenu *menu;
@@ -70,15 +117,75 @@ withParentMenuId: (int)theParentMenuId
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification
 {
   self->statusItem = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
+
   self->menu = [[NSMenu alloc] init];
-  [self->menu setAutoenablesItems: FALSE];
-  [self->statusItem setMenu:self->menu];
+  self->menu.delegate = self;
+  self->menu.autoenablesItems = FALSE;
+  // Once the user has removed it, the item needs to be explicitly brought back,
+  // even restarting the application is insufficient.
+  // Since the interface from Go is relatively simple, for now we ensure it's
+  // always visible at application startup.
+  self->statusItem.visible = TRUE;
+
+  NSStatusBarButton *button = self->statusItem.button;
+  button.action = @selector(leftMouseClicked);
+
+  [NSEvent addLocalMonitorForEventsMatchingMask: (NSEventTypeLeftMouseDown|NSEventTypeRightMouseDown)
+                                        handler: ^NSEvent *(NSEvent *event) {
+    if (event.window != self->statusItem.button.window) {
+      return event;
+    }
+
+    if (event.modifierFlags & NSEventModifierFlagCommand) {
+      return event;
+    }
+
+    [self leftMouseClicked];
+
+    return nil;
+  }];
+
+  NSSize size = [button frame].size;
+  NSRect frame = CGRectMake(0, 0, size.width, size.height);
+  RightClickDetector *rightClicker = [[RightClickDetector alloc] initWithFrame:frame];
+  rightClicker.onRightClicked = ^(NSEvent *event) {
+    [self rightMouseClicked];
+  };
+
+  rightClicker.autoresizingMask = (NSViewWidthSizable |
+                                   NSViewHeightSizable);
+  button.autoresizesSubviews = YES;
+  [button addSubview:rightClicker];
+
   systray_ready();
+}
+
+- (void)rightMouseClicked {
+  systray_right_click();
+}
+
+- (void)leftMouseClicked {
+  systray_left_click();
 }
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification
 {
   systray_on_exit();
+}
+
+- (void)setRemovalAllowed {
+  NSStatusItemBehavior behavior = [self->statusItem behavior];
+  behavior |= NSStatusItemBehaviorRemovalAllowed;
+  self->statusItem.behavior = behavior;
+}
+
+- (void)setRemovalForbidden {
+  NSStatusItemBehavior behavior = [self->statusItem behavior];
+  behavior &= ~NSStatusItemBehaviorRemovalAllowed;
+  // Ensure the menu item is visible if it was removed, since we're now
+  // disallowing removal.
+  self->statusItem.visible = TRUE;
+  self->statusItem.behavior = behavior;
 }
 
 - (void)setIcon:(NSImage *)image {
@@ -91,7 +198,7 @@ withParentMenuId: (int)theParentMenuId
   [self updateTitleButtonStyle];
 }
 
--(void)updateTitleButtonStyle {
+- (void)updateTitleButtonStyle {
   if (statusItem.button.image != nil) {
     if ([statusItem.button.title length] == 0) {
       statusItem.button.imagePosition = NSImageOnly;
@@ -114,6 +221,10 @@ withParentMenuId: (int)theParentMenuId
   systray_menu_item_selected(menuId.intValue);
 }
 
+- (void)menuWillOpen:(NSMenu *)menu {
+  systray_menu_will_open();
+}
+
 - (void)add_or_update_menu_item:(MenuItem *)item {
   NSMenu *theMenu = self->menu;
   NSMenuItem *parentItem;
@@ -127,9 +238,8 @@ withParentMenuId: (int)theParentMenuId
       [parentItem setSubmenu:theMenu];
     }
   }
-  
-  NSMenuItem *menuItem;
-  menuItem = find_menu_item(theMenu, item->menuId);
+
+  NSMenuItem *menuItem = find_menu_item(theMenu, item->menuId);
   if (menuItem == NULL) {
     menuItem = [theMenu addItemWithTitle:item->title
                                action:@selector(menuHandler:)
@@ -140,6 +250,8 @@ withParentMenuId: (int)theParentMenuId
   [menuItem setTag:[item->menuId integerValue]];
   [menuItem setTarget:self];
   [menuItem setToolTip:item->tooltip];
+  [menuItem setKeyEquivalent:item->shortcutKey];
+  [menuItem setKeyEquivalentModifierMask:item->shortcutMods];
   if (item->disabled == 1) {
     menuItem.enabled = FALSE;
   } else {
@@ -204,6 +316,23 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
   menuItem.image = image;
 }
 
+- (void)show_menu
+{
+  // Attach the menu and synthesize a click so AppKit positions it natively,
+  // then detach it in menuDidClose: so the next click reaches the button
+  // action (and the Go tap handlers) again.
+  self->statusItem.menu = self->menu;
+  [self->statusItem.button performClick:nil];
+}
+
+- (void)menuDidClose:(NSMenu *)menu {
+  // Defer the detach so we don't pull the menu out from under AppKit
+  // while it is still tearing the menu down.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    self->statusItem.menu = nil;
+  });
+}
+
 - (void) show_menu_item:(NSNumber*) menuId
 {
   NSMenuItem* menuItem = find_menu_item(menu, menuId);
@@ -216,7 +345,7 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 {
   NSMenuItem* menuItem = find_menu_item(menu, menuId);
   if (menuItem != NULL) {
-    [menuItem.menu removeItem:menuItem];     
+    [menuItem.menu removeItem:menuItem];
   }
 }
 
@@ -227,13 +356,27 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 
 - (void) quit
 {
-  [NSApp terminate:self];
+  // This tells the app event loop to stop after processing remaining messages.
+  [NSApp stop:self];
+  // The event loop won't return until it processes another event.
+  // https://stackoverflow.com/a/48064752/149482
+  NSPoint eventLocation = NSMakePoint(0, 0);
+  NSEvent *customEvent = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                                            location:eventLocation
+                                       modifierFlags:0
+                                           timestamp:0
+                                        windowNumber:0
+                                             context:nil
+                                             subtype:0
+                                               data1:0
+                                               data2:0];
+  [NSApp postEvent:customEvent atStart:NO];
 }
 
 @end
 
 bool internalLoop = false;
-AppDelegate *owner;
+SystrayAppDelegate *owner;
 
 void setInternalLoop(bool i) {
 	internalLoop = i;
@@ -244,7 +387,7 @@ void registerSystray(void) {
     return;
   }
 
-  owner = [[AppDelegate alloc] init];
+  owner = [[SystrayAppDelegate alloc] init];
   [[NSApplication sharedApplication] setDelegate:owner];
 
   // A workaround to avoid crashing on macOS versions before Catalina. Somehow
@@ -267,7 +410,7 @@ int nativeLoop(void) {
 }
 
 void nativeStart(void) {
-  owner = [[AppDelegate alloc] init];
+  owner = [[SystrayAppDelegate alloc] init];
 
   NSNotification *launched = [NSNotification notificationWithName:NSApplicationDidFinishLaunchingNotification
                                                         object:[NSApplication sharedApplication]];
@@ -316,10 +459,19 @@ void setTooltip(char* ctooltip) {
   runInMainThread(@selector(setTooltip:), (id)tooltip);
 }
 
-void add_or_update_menu_item(int menuId, int parentMenuId, char* title, char* tooltip, short disabled, short checked, short isCheckable) {
-  MenuItem* item = [[MenuItem alloc] initWithId: menuId withParentMenuId: parentMenuId withTitle: title withTooltip: tooltip withDisabled: disabled withChecked: checked];
+void setRemovalAllowed(bool allowed) {
+  if (allowed) {
+    runInMainThread(@selector(setRemovalAllowed), nil);
+  } else {
+    runInMainThread(@selector(setRemovalForbidden), nil);
+  }
+}
+
+void add_or_update_menu_item(int menuId, int parentMenuId, char* title, char* tooltip, char* shortcutKey, unsigned int shortcutMods, short disabled, short checked, short isCheckable) {
+  MenuItem* item = [[MenuItem alloc] initWithId: menuId withParentMenuId: parentMenuId withTitle: title withTooltip: tooltip withShortcutKey: shortcutKey withShortcutMods: shortcutMods withDisabled: disabled withChecked: checked];
   free(title);
   free(tooltip);
+  free(shortcutKey);
   runInMainThread(@selector(add_or_update_menu_item:), (id)item);
 }
 
@@ -336,6 +488,10 @@ void hide_menu_item(int menuId) {
 void remove_menu_item(int menuId) {
   NSNumber *mId = [NSNumber numberWithInt:menuId];
   runInMainThread(@selector(remove_menu_item:), (id)mId);
+}
+
+void show_menu() {
+  runInMainThread(@selector(show_menu), nil);
 }
 
 void show_menu_item(int menuId) {
