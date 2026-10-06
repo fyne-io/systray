@@ -7,7 +7,7 @@ removing the GTK dependency and support for legacy linux system tray.
 ## Features
 
 * Supported on Windows, macOS, Linux and many BSD systems
-* Menu items can be checked and/or disabled
+* Menu items can be checked (as a checkbox or a radio button) and/or disabled
 * Methods may be called from any Goroutine
 
 ## API

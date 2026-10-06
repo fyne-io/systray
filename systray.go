@@ -70,6 +70,8 @@ type MenuItem struct {
 	checked bool
 	// has the menu item a checkbox (Linux)
 	isCheckable bool
+	// isRadio shows a radio button instead of a checkbox, for a choice of one item in a group
+	isRadio bool
 	// shortcutKey is the key of the keyboard shortcut for this item, if any
 	shortcutKey string
 	// shortcutMods are the modifier keys of the keyboard shortcut for this item
@@ -206,6 +208,20 @@ func AddMenuItemCheckbox(title string, tooltip string, checked bool) *MenuItem {
 	return item
 }
 
+// AddMenuItemRadio adds a menu item with the designated title and tooltip and a radio button,
+// for a group of items where only one can be selected.
+// Checking an item does not uncheck the others in its group, call Uncheck on them when the
+// selection changes. On macOS a selected item shows a check mark, as is usual on that platform.
+// It can be safely invoked from different goroutines.
+func AddMenuItemRadio(title string, tooltip string, checked bool) *MenuItem {
+	item := newMenuItem(title, tooltip, nil)
+	item.isCheckable = true
+	item.isRadio = true
+	item.checked = checked
+	item.update()
+	return item
+}
+
 // AddSeparator adds a separator bar to the menu
 func AddSeparator() {
 	addSeparator(currentID.Add(1), 0)
@@ -231,6 +247,20 @@ func (item *MenuItem) AddSubMenuItem(title string, tooltip string) *MenuItem {
 func (item *MenuItem) AddSubMenuItemCheckbox(title string, tooltip string, checked bool) *MenuItem {
 	child := newMenuItem(title, tooltip, item)
 	child.isCheckable = true
+	child.checked = checked
+	child.update()
+	return child
+}
+
+// AddSubMenuItemRadio adds a nested sub-menu item with the designated title and tooltip and a
+// radio button, for a group of items where only one can be selected.
+// Checking an item does not uncheck the others in its group, call Uncheck on them when the
+// selection changes. On macOS a selected item shows a check mark, as is usual on that platform.
+// It can be safely invoked from different goroutines.
+func (item *MenuItem) AddSubMenuItemRadio(title string, tooltip string, checked bool) *MenuItem {
+	child := newMenuItem(title, tooltip, item)
+	child.isCheckable = true
+	child.isRadio = true
 	child.checked = checked
 	child.update()
 	return child

@@ -62,6 +62,26 @@ func onReady() {
 		subMenuMiddle.AddSeparator()
 		subMenuBottom2 := subMenuMiddle.AddSubMenuItem("SubMenuBottom - Panic!", "SubMenu Test (bottom)")
 
+		mSize := systray.AddMenuItem("Size", "Only one size can be selected")
+		sizes := []*systray.MenuItem{
+			mSize.AddSubMenuItemRadio("Small", "Small", false),
+			mSize.AddSubMenuItemRadio("Medium", "Medium", true),
+			mSize.AddSubMenuItemRadio("Large", "Large", false),
+		}
+		for _, size := range sizes {
+			go func(selected *systray.MenuItem) {
+				for range selected.ClickedCh {
+					for _, other := range sizes {
+						if other == selected {
+							other.Check()
+						} else {
+							other.Uncheck()
+						}
+					}
+				}
+			}(size)
+		}
+
 		systray.AddSeparator()
 		mToggle := systray.AddMenuItem("Toggle", "Toggle some menu items")
 		shown := true

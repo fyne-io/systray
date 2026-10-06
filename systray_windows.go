@@ -587,7 +587,7 @@ func (item *MenuItem) shortcutText() string {
 	return b.String()
 }
 
-func (t *winTray) addOrUpdateMenuItem(menuItemId uint32, parentId uint32, title, shortcut string, disabled, checked bool) error {
+func (t *winTray) addOrUpdateMenuItem(menuItemId uint32, parentId uint32, title, shortcut string, disabled, checked, radio bool) error {
 	if !wt.isReady() {
 		return ErrTrayNotReadyYet
 	}
@@ -606,7 +606,10 @@ func (t *winTray) addOrUpdateMenuItem(menuItemId uint32, parentId uint32, title,
 		MIIM_ID      = 0x00000002
 		MIIM_STATE   = 0x00000001
 	)
-	const MFT_STRING = 0x00000000
+	const (
+		MFT_STRING     = 0x00000000
+		MFT_RADIOCHECK = 0x00000200
+	)
 	const (
 		MFS_CHECKED  = 0x00000008
 		MFS_DISABLED = 0x00000003
@@ -629,6 +632,10 @@ func (t *winTray) addOrUpdateMenuItem(menuItemId uint32, parentId uint32, title,
 	}
 	if checked {
 		mi.State |= MFS_CHECKED
+	}
+	if radio {
+		// A checked item shows a bullet instead of a check mark
+		mi.Type |= MFT_RADIOCHECK
 	}
 	t.muMenuItemIcons.RLock()
 	hIcon := t.menuItemIcons[menuItemId]
@@ -1107,7 +1114,7 @@ func (item *MenuItem) SetIconFromFilePath(iconFilePath string) error {
 	wt.menuItemIcons[uint32(item.id)] = h
 	wt.muMenuItemIcons.Unlock()
 
-	err = wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.shortcutText(), item.disabled, item.checked)
+	err = wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.shortcutText(), item.disabled, item.checked, item.isRadio)
 	if err != nil {
 		return fmt.Errorf("unable to addOrUpdateMenuItem: %s", err)
 	}
@@ -1124,7 +1131,7 @@ func SetTooltip(tooltip string) {
 }
 
 func addOrUpdateMenuItem(item *MenuItem) {
-	err := wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.shortcutText(), item.disabled, item.checked)
+	err := wt.addOrUpdateMenuItem(uint32(item.id), item.parentId(), item.title, item.shortcutText(), item.disabled, item.checked, item.isRadio)
 	if err != nil {
 		log.Printf("systray error: unable to addOrUpdateMenuItem: %s\n", err)
 		return

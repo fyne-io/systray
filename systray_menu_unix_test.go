@@ -56,3 +56,28 @@ func TestApplyItemToLayout_shortcut(t *testing.T) {
 		t.Error("expected the shortcut property to be removed")
 	}
 }
+
+func TestApplyItemToLayout_toggle(t *testing.T) {
+	for name, tt := range map[string]struct {
+		item      MenuItem
+		wantType  string
+		wantState int
+	}{
+		"plain":            {MenuItem{}, "", 0},
+		"checkbox":         {MenuItem{isCheckable: true}, "checkmark", 0},
+		"checked checkbox": {MenuItem{isCheckable: true, checked: true}, "checkmark", 1},
+		"radio":            {MenuItem{isCheckable: true, isRadio: true}, "radio", 0},
+		"checked radio":    {MenuItem{isCheckable: true, isRadio: true, checked: true}, "radio", 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			layout := &menuLayout{V1: map[string]dbus.Variant{}}
+			applyItemToLayout(&tt.item, layout)
+			if got := layout.V1["toggle-type"].Value(); got != tt.wantType {
+				t.Errorf("toggle-type = %v, want %q", got, tt.wantType)
+			}
+			if got := layout.V1["toggle-state"].Value(); got != tt.wantState {
+				t.Errorf("toggle-state = %v, want %d", got, tt.wantState)
+			}
+		})
+	}
+}
