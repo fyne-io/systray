@@ -1,3 +1,5 @@
+//go:build (linux || freebsd || openbsd || netbsd) && !android
+
 package systray
 
 import (
