@@ -233,7 +233,10 @@ type winTray struct {
 
 	nid   *notifyIconData
 	muNID sync.RWMutex
-	wcex  *wndClassEx
+	// hidden is set by SetVisible(false); the icon is then deleted from the
+	// notification area and added back when visible. Guarded by muNID.
+	hidden bool
+	wcex   *wndClassEx
 
 	wmSystrayMessage,
 	wmTaskbarCreated uint32
@@ -334,7 +337,9 @@ func (t *winTray) wndProc(hWnd windows.Handle, message uint32, wParam, lParam ui
 		}
 	case t.wmTaskbarCreated: // on explorer.exe restarts
 		t.muNID.Lock()
-		t.nid.add()
+		if !t.hidden {
+			t.nid.add()
+		}
 		t.muNID.Unlock()
 	default:
 		// Calls the default window procedure to provide default processing for any window messages that an application does not process.
@@ -478,6 +483,9 @@ func (t *winTray) initInstance() error {
 	}
 	t.nid.Size = uint32(unsafe.Sizeof(*t.nid))
 
+	if t.hidden {
+		return nil
+	}
 	return t.nid.add()
 }
 
@@ -543,6 +551,30 @@ func (t *winTray) convertToSubMenu(menuItemId uint32) (windows.Handle, error) {
 // SetRemovalAllowed sets whether a user can remove the systray icon or not.
 // This is only supported on macOS.
 func SetRemovalAllowed(allowed bool) {
+}
+
+// SetVisible shows or hides the systray icon, keeping the tray and its menu
+// running. On Windows the icon is deleted from the notification area while
+// hidden, and added back, with its icon and tooltip, when visible.
+func SetVisible(visible bool) {
+	wt.muNID.Lock()
+	defer wt.muNID.Unlock()
+	if wt.hidden == !visible {
+		return
+	}
+	wt.hidden = !visible
+	if wt.nid == nil {
+		return // not initialised yet: initInstance honours hidden
+	}
+	var err error
+	if visible {
+		err = wt.nid.add()
+	} else {
+		err = wt.nid.delete()
+	}
+	if err != nil {
+		log.Printf("systray error: unable to set visibility: %s\n", err)
+	}
 }
 
 // winKeyNames maps the platform neutral key names used by SetShortcut to the names

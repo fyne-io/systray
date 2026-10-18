@@ -207,6 +207,42 @@ func SetTooltip(tooltipTitle string) {
 	}
 }
 
+// SetVisible shows or hides the systray icon, keeping the tray and its menu
+// running. On Linux the item's Status becomes Passive while hidden, which
+// StatusNotifierItem hosts do not show, and Active again when visible.
+func SetVisible(visible bool) {
+	instance.lock.Lock()
+	instance.hidden = !visible
+	props := instance.props
+	conn := instance.conn
+	instance.lock.Unlock()
+
+	if props == nil {
+		return
+	}
+	status := statusValue(!visible)
+	props.SetMust("org.kde.StatusNotifierItem", "Status", status)
+
+	if conn == nil {
+		return
+	}
+	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewStatusSignal{
+		Path: path,
+		Body: &notifier.StatusNotifierItem_NewStatusSignalBody{Status: status},
+	})
+	if err != nil {
+		log.Printf("systray error: failed to emit new status signal: %s\n", err)
+	}
+}
+
+// statusValue is the StatusNotifierItem Status for a tray hidden or not.
+func statusValue(hidden bool) string {
+	if hidden {
+		return "Passive"
+	}
+	return "Active"
+}
+
 // SetTemplateIcon sets the icon of a menu item as a template icon (on macOS). On Windows and
 // Linux, it falls back to the regular icon bytes.
 // templateIconBytes and regularIconBytes should be the content of .ico for windows and
@@ -377,6 +413,8 @@ type tray struct {
 	iconData []byte
 	// title and tooltip state
 	title, tooltipTitle string
+	// hidden is set by SetVisible(false): the item is Passive.
+	hidden bool
 
 	lock             sync.Mutex
 	menu             *menuLayout
@@ -395,7 +433,7 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 	return map[string]map[string]*prop.Prop{
 		"org.kde.StatusNotifierItem": {
 			"Status": {
-				Value:    "Active", // Passive, Active or NeedsAttention
+				Value:    statusValue(t.hidden), // Passive, Active or NeedsAttention
 				Writable: false,
 				Emit:     prop.EmitTrue,
 				Callback: nil,

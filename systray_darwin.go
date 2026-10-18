@@ -107,6 +107,12 @@ func (item *MenuItem) SetTemplateIcon(templateIconBytes []byte, regularIconBytes
 	C.setMenuItemIcon(cstr, (C.int)(len(templateIconBytes)), C.int(item.id), true)
 }
 
+// SetVisible shows or hides the systray icon, keeping the tray and its menu
+// running.
+func SetVisible(visible bool) {
+	C.setVisible((C.bool)(visible))
+}
+
 // SetRemovalAllowed sets whether a user can remove the systray icon or not.
 // This is only supported on macOS.
 func SetRemovalAllowed(allowed bool) {
