@@ -3,6 +3,10 @@
 #import <Cocoa/Cocoa.h>
 #include "systray.h"
 
+// statusItemVisible is what SetVisible asked for, applied to the status item
+// when it is created if SetVisible came first.
+static BOOL statusItemVisible = YES;
+
 #if __MAC_OS_X_VERSION_MIN_REQUIRED < 101400
 
     #ifndef NSControlStateValueOff
@@ -466,10 +470,6 @@ void setTooltip(char* ctooltip) {
   free(ctooltip);
   runInMainThread(@selector(setTooltip:), (id)tooltip);
 }
-
-// statusItemVisible is what SetVisible asked for, applied to the status item
-// when it is created if SetVisible came first.
-static BOOL statusItemVisible = YES;
 
 void setVisible(bool visible) {
   statusItemVisible = visible;
