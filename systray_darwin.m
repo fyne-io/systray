@@ -3,6 +3,10 @@
 #import <Cocoa/Cocoa.h>
 #include "systray.h"
 
+// statusItemVisible is what SetVisible asked for, applied to the status item
+// when it is created if SetVisible came first.
+static BOOL statusItemVisible = YES;
+
 #if __MAC_OS_X_VERSION_MIN_REQUIRED < 101400
 
     #ifndef NSControlStateValueOff
@@ -125,7 +129,7 @@ withShortcutMods: (unsigned int)theShortcutMods
   // even restarting the application is insufficient.
   // Since the interface from Go is relatively simple, for now we ensure it's
   // always visible at application startup.
-  self->statusItem.visible = TRUE;
+  self->statusItem.visible = statusItemVisible;
 
   NSStatusBarButton *button = self->statusItem.button;
   button.action = @selector(leftMouseClicked);
@@ -186,6 +190,14 @@ withShortcutMods: (unsigned int)theShortcutMods
   // disallowing removal.
   self->statusItem.visible = TRUE;
   self->statusItem.behavior = behavior;
+}
+
+- (void)showStatusItem {
+  self->statusItem.visible = TRUE;
+}
+
+- (void)hideStatusItem {
+  self->statusItem.visible = FALSE;
 }
 
 - (void)setIcon:(NSImage *)image {
@@ -457,6 +469,11 @@ void setTooltip(char* ctooltip) {
                                                encoding:NSUTF8StringEncoding];
   free(ctooltip);
   runInMainThread(@selector(setTooltip:), (id)tooltip);
+}
+
+void setVisible(bool visible) {
+  statusItemVisible = visible;
+  runInMainThread(visible ? @selector(showStatusItem) : @selector(hideStatusItem), nil);
 }
 
 void setRemovalAllowed(bool allowed) {
