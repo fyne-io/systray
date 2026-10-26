@@ -207,10 +207,9 @@ func SetTooltip(tooltipTitle string) {
 	}
 }
 
-// SetVisible shows or hides the systray icon, keeping the tray and its menu
-// running. On Linux the item's Status becomes Passive while hidden, which
+// setVisible makes the item's Status Passive while hidden, which
 // StatusNotifierItem hosts do not show, and Active again when visible.
-func SetVisible(visible bool) {
+func setVisible(visible bool) {
 	instance.lock.Lock()
 	instance.hidden = !visible
 	props := instance.props
@@ -413,7 +412,7 @@ type tray struct {
 	iconData []byte
 	// title and tooltip state
 	title, tooltipTitle string
-	// hidden is set by SetVisible(false): the item is Passive.
+	// hidden is set by Hide: the item is Passive.
 	hidden bool
 
 	lock             sync.Mutex

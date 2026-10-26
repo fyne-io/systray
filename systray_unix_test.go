@@ -21,7 +21,7 @@ func TestPropSpecCoversIntrospection(t *testing.T) {
 // visible one is Active. The state set before the tray is exported is the
 // one it is exported with.
 func TestStatusFollowsVisibility(t *testing.T) {
-	defer SetVisible(true)
+	defer Show()
 
 	status := func() string {
 		return instance.createPropSpec()["org.kde.StatusNotifierItem"]["Status"].Value.(string)
@@ -29,12 +29,12 @@ func TestStatusFollowsVisibility(t *testing.T) {
 	if got := status(); got != "Active" {
 		t.Fatalf("a new tray has Status %q, want Active", got)
 	}
-	SetVisible(false)
+	Hide()
 	if got := status(); got != "Passive" {
-		t.Fatalf("after SetVisible(false) Status is %q, want Passive", got)
+		t.Fatalf("after Hide Status is %q, want Passive", got)
 	}
-	SetVisible(true)
+	Show()
 	if got := status(); got != "Active" {
-		t.Fatalf("after SetVisible(true) Status is %q, want Active", got)
+		t.Fatalf("after Show Status is %q, want Active", got)
 	}
 }

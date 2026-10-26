@@ -3,8 +3,8 @@
 #import <Cocoa/Cocoa.h>
 #include "systray.h"
 
-// statusItemVisible is what SetVisible asked for, applied to the status item
-// when it is created if SetVisible came first.
+// statusItemVisible is what Show or Hide asked for, applied to the status item
+// when it is created if they came first.
 static BOOL statusItemVisible = YES;
 
 #if __MAC_OS_X_VERSION_MIN_REQUIRED < 101400

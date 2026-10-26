@@ -233,7 +233,7 @@ type winTray struct {
 
 	nid   *notifyIconData
 	muNID sync.RWMutex
-	// hidden is set by SetVisible(false); the icon is then deleted from the
+	// hidden is set by Hide; the icon is then deleted from the
 	// notification area and added back when visible. Guarded by muNID.
 	hidden bool
 	wcex   *wndClassEx
@@ -553,10 +553,9 @@ func (t *winTray) convertToSubMenu(menuItemId uint32) (windows.Handle, error) {
 func SetRemovalAllowed(allowed bool) {
 }
 
-// SetVisible shows or hides the systray icon, keeping the tray and its menu
-// running. On Windows the icon is deleted from the notification area while
-// hidden, and added back, with its icon and tooltip, when visible.
-func SetVisible(visible bool) {
+// setVisible deletes the icon from the notification area while hidden, and adds
+// it back, with its icon and tooltip, when visible.
+func setVisible(visible bool) {
 	wt.muNID.Lock()
 	defer wt.muNID.Unlock()
 	if wt.hidden == !visible {

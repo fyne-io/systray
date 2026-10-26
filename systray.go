@@ -186,6 +186,23 @@ func SetOnSecondaryTapped(f func()) {
 	tappedRight = f
 }
 
+// Show shows the systray icon, keeping the tray and its menu running.
+// On Linux the item's Status is Active, on Windows the icon is added back to the
+// notification area with its icon and tooltip, and on macOS the status item is made visible.
+// It can be called before the tray is running, in which case the icon starts shown.
+func Show() {
+	setVisible(true)
+}
+
+// Hide hides the systray icon, keeping the tray and its menu running.
+// On Linux the item's Status becomes Passive, which StatusNotifierItem hosts do not show,
+// on Windows the icon is deleted from the notification area, and on macOS the status item
+// is made invisible. It can be called before the tray is running, in which case the icon
+// starts hidden.
+func Hide() {
+	setVisible(false)
+}
+
 // AddMenuItem adds a menu item with the designated title and tooltip.
 // It can be safely invoked from different goroutines.
 // Created menu items are checkable on Windows and OSX by default. For Linux you have to use AddMenuItemCheckbox
