@@ -4,6 +4,8 @@ extern void systray_ready();
 extern void systray_on_exit();
 extern void systray_left_click();
 extern void systray_right_click();
+extern void systray_middle_click();
+extern void systray_scroll(int delta, bool horizontal);
 extern void systray_menu_item_selected(int menu_id);
 extern void systray_menu_will_open();
 void registerSystray(void);

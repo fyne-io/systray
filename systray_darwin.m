@@ -79,20 +79,35 @@ withShortcutMods: (unsigned int)theShortcutMods
 }
 @end
 
-@interface RightClickDetector : NSView
+@interface ClickDetector : NSView
 
 @property (copy) void (^onRightClicked)(NSEvent *);
+@property (copy) void (^onMiddleClicked)(NSEvent *);
+@property (copy) void (^onScrolled)(NSEvent *);
 
 @end
 
-@implementation RightClickDetector
+@implementation ClickDetector
 
 - (void)rightMouseUp:(NSEvent *)theEvent {
   if (!self.onRightClicked) {
     return;
   }
-
   self.onRightClicked(theEvent);
+}
+
+- (void)otherMouseUp:(NSEvent *)theEvent {
+  // Button 2 is middle mouse button
+  if (theEvent.buttonNumber == 2 && self.onMiddleClicked) {
+    self.onMiddleClicked(theEvent);
+  }
+}
+
+- (void)scrollWheel:(NSEvent *)theEvent {
+  if (!self.onScrolled) {
+    return;
+  }
+  self.onScrolled(theEvent);
 }
 
 @end
@@ -147,15 +162,21 @@ withShortcutMods: (unsigned int)theShortcutMods
 
   NSSize size = [button frame].size;
   NSRect frame = CGRectMake(0, 0, size.width, size.height);
-  RightClickDetector *rightClicker = [[RightClickDetector alloc] initWithFrame:frame];
-  rightClicker.onRightClicked = ^(NSEvent *event) {
+  ClickDetector *clickDetector = [[ClickDetector alloc] initWithFrame:frame];
+  clickDetector.onRightClicked = ^(NSEvent *event) {
     [self rightMouseClicked];
   };
+  clickDetector.onMiddleClicked = ^(NSEvent *event) {
+    [self middleMouseClicked];
+  };
+  clickDetector.onScrolled = ^(NSEvent *event) {
+    [self scrolled:event];
+  };
 
-  rightClicker.autoresizingMask = (NSViewWidthSizable |
+  clickDetector.autoresizingMask = (NSViewWidthSizable |
                                    NSViewHeightSizable);
   button.autoresizesSubviews = YES;
-  [button addSubview:rightClicker];
+  [button addSubview:clickDetector];
 
   systray_ready();
 }
@@ -166,6 +187,30 @@ withShortcutMods: (unsigned int)theShortcutMods
 
 - (void)leftMouseClicked {
   systray_left_click();
+}
+
+- (void)middleMouseClicked {
+  systray_middle_click();
+}
+
+- (void)scrolled:(NSEvent *)event {
+  // deltaY > 0 means scroll up (away from user)
+  // deltaX > 0 means scroll right
+  CGFloat deltaY = event.scrollingDeltaY;
+  CGFloat deltaX = event.scrollingDeltaX;
+
+  // Use the larger delta to determine direction
+  if (fabs(deltaY) >= fabs(deltaX)) {
+    int intDelta = (int)deltaY;
+    if (intDelta != 0) {
+      systray_scroll(intDelta, false);
+    }
+  } else {
+    int intDelta = (int)deltaX;
+    if (intDelta != 0) {
+      systray_scroll(intDelta, true);
+    }
+  }
 }
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification
