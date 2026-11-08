@@ -314,6 +314,13 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
     return;
   }
   menuItem.image = image;
+#ifdef __MAC_27_0
+  // From the macOS 27 SDK on, AppKit hides menu item images unless asked
+  // not to, so a menu item that was given an icon must say it wants it shown.
+  if (@available(macOS 27.0, *)) {
+    menuItem.preferredImageVisibility = NSMenuItemImageVisibilityVisible;
+  }
+#endif
 }
 
 - (void)show_menu
