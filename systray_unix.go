@@ -207,6 +207,84 @@ func SetTooltip(tooltipTitle string) {
 	}
 }
 
+// setVisible makes the item's Status Passive while hidden, which
+// StatusNotifierItem hosts do not show, and Active again when visible.
+// Either way a pending attention request is dropped.
+func setVisible(visible bool) {
+	instance.lock.Lock()
+	instance.hidden = !visible
+	instance.attention = false
+	instance.lock.Unlock()
+
+	instance.updateStatus()
+}
+
+// requestAttention makes the item's Status NeedsAttention. A hidden item stays Passive.
+func requestAttention() {
+	instance.lock.Lock()
+	if instance.hidden {
+		instance.lock.Unlock()
+		return
+	}
+	instance.attention = true
+	instance.lock.Unlock()
+
+	instance.updateStatus()
+}
+
+// clearAttention returns the item's Status to Active once the user has interacted with it.
+// It does nothing, and emits nothing, if attention was not requested.
+func clearAttention() {
+	instance.lock.Lock()
+	if !instance.attention {
+		instance.lock.Unlock()
+		return
+	}
+	instance.attention = false
+	instance.lock.Unlock()
+
+	instance.updateStatus()
+}
+
+// updateStatus publishes the current Status property and emits NewStatus.
+// If the tray is not exported yet, the Status is picked up by createPropSpec instead.
+func (t *tray) updateStatus() {
+	t.lock.Lock()
+	status := statusValue(t.hidden, t.attention)
+	props := t.props
+	conn := t.conn
+	t.lock.Unlock()
+
+	if props == nil {
+		return
+	}
+	props.SetMust("org.kde.StatusNotifierItem", "Status", status)
+
+	if conn == nil {
+		return
+	}
+	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewStatusSignal{
+		Path: path,
+		Body: &notifier.StatusNotifierItem_NewStatusSignalBody{Status: status},
+	})
+	if err != nil {
+		log.Printf("systray error: failed to emit new status signal: %s\n", err)
+	}
+}
+
+// statusValue is the StatusNotifierItem Status for a tray hidden or asking for attention.
+// Hidden wins, so a hidden tray never asks for attention.
+func statusValue(hidden, attention bool) string {
+	switch {
+	case hidden:
+		return "Passive"
+	case attention:
+		return "NeedsAttention"
+	default:
+		return "Active"
+	}
+}
+
 // SetTemplateIcon sets the icon of a menu item as a template icon (on macOS). On Windows and
 // Linux, it falls back to the regular icon bytes.
 // templateIconBytes and regularIconBytes should be the content of .ico for windows and
@@ -377,6 +455,11 @@ type tray struct {
 	iconData []byte
 	// title and tooltip state
 	title, tooltipTitle string
+	// hidden is set by Hide: the item is Passive.
+	hidden bool
+	// attention is set by RequestAttention: the item is NeedsAttention until the user
+	// activates it or Show or Hide is called. Never set while hidden.
+	attention bool
 
 	lock             sync.Mutex
 	menu             *menuLayout
@@ -395,7 +478,7 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 	return map[string]map[string]*prop.Prop{
 		"org.kde.StatusNotifierItem": {
 			"Status": {
-				Value:    "Active", // Passive, Active or NeedsAttention
+				Value:    statusValue(t.hidden, t.attention), // Passive, Active or NeedsAttention
 				Writable: false,
 				Emit:     prop.EmitTrue,
 				Callback: nil,

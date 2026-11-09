@@ -15,6 +15,7 @@ func newLeftRightNotifierItem() notifier.StatusNotifierItemer {
 }
 
 func (i *leftRightNotifierItem) Activate(_, _ int32) *dbus.Error {
+	clearAttention()
 	if f := tappedLeft; f == nil {
 		return &dbus.ErrMsgUnknownMethod
 	}
@@ -24,6 +25,7 @@ func (i *leftRightNotifierItem) Activate(_, _ int32) *dbus.Error {
 }
 
 func (i *leftRightNotifierItem) ContextMenu(_, _ int32) *dbus.Error {
+	clearAttention()
 	if f := tappedRight; f == nil {
 		return &dbus.ErrMsgUnknownMethod
 	}
@@ -33,6 +35,7 @@ func (i *leftRightNotifierItem) ContextMenu(_, _ int32) *dbus.Error {
 }
 
 func (i *leftRightNotifierItem) SecondaryActivate(_, _ int32) *dbus.Error {
+	clearAttention()
 	if f := tappedRight; f == nil {
 		return &dbus.ErrMsgUnknownMethod
 	}

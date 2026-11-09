@@ -168,6 +168,10 @@ func (t *tray) EventGroup(events []struct {
 
 // AboutToShow is com.canonical.dbusmenu.AboutToShow method.
 func (t *tray) AboutToShow(id int32) (needUpdate bool, err *dbus.Error) {
+	if id == 0 {
+		// the root menu is opening, which is the only click a menu-only item gets
+		clearAttention()
+	}
 	return
 }
 
