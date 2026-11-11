@@ -805,6 +805,11 @@ func (t *winTray) showMenu() error {
 		return err
 	}
 
+	select {
+	case TrayOpenedCh <- struct{}{}:
+	default:
+	}
+
 	return nil
 }
 
