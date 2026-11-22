@@ -118,6 +118,11 @@ withShortcutMods: (unsigned int)theShortcutMods
 {
   self->statusItem = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
 
+  NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier];
+  if (bundleId) {
+    self->statusItem.autosaveName = bundleId;
+  }
+
   self->menu = [[NSMenu alloc] init];
   self->menu.delegate = self;
   self->menu.autoenablesItems = FALSE;
