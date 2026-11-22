@@ -24,9 +24,6 @@ func (item *MenuItem) SetIcon(iconBytes []byte) {
 	if exists {
 		m.V1["icon-data"] = dbus.MakeVariant(iconBytes)
 		emitItemPropertiesUpdated(int32(item.id), m.V1)
-		// Property-only change; per spec LayoutUpdated isn't required here,
-		// but kept as a fallback for clients that only watch LayoutUpdated.
-		refresh()
 	}
 }
 
@@ -257,9 +254,6 @@ func addOrUpdateMenuItem(item *MenuItem) {
 	applyItemToLayout(item, layout)
 	if exists {
 		emitItemPropertiesUpdated(int32(item.id), layout.V1)
-		// Property-only change on an existing item; per spec LayoutUpdated isn't required here,
-		// but kept as a fallback for clients that only watch LayoutUpdated.
-		refresh()
 	} else {
 		// We've added "children-display", that's a property change
 		if parentForChildrenDisplayUpdate != nil {
@@ -444,9 +438,6 @@ func hideMenuItem(item *MenuItem) {
 	if exists {
 		m.V1["visible"] = dbus.MakeVariant(false)
 		emitItemPropertiesUpdated(int32(item.id), m.V1)
-		// Property-only change; per spec LayoutUpdated isn't required here,
-		// but kept as a fallback for clients that only watch LayoutUpdated.
-		refresh()
 	}
 }
 
@@ -457,9 +448,6 @@ func showMenuItem(item *MenuItem) {
 	if exists {
 		m.V1["visible"] = dbus.MakeVariant(true)
 		emitItemPropertiesUpdated(int32(item.id), m.V1)
-		// Property-only change; per spec LayoutUpdated isn't required here,
-		// but kept as a fallback for clients that only watch LayoutUpdated.
-		refresh()
 	}
 }
 
