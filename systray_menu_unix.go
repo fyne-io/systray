@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -89,7 +90,7 @@ func (t *tray) GetLayout(parentID int32, recursionDepth int32, propertyNames []s
 			}()
 		}
 		// return copy of menu layout to prevent panic from cuncurrent access to layout
-		return instance.menuVersion, *copyLayout(m, depth), nil
+		return atomic.LoadUint32(&instance.menuVersion), *copyLayout(m, depth), nil
 	}
 	return
 }
@@ -189,7 +190,7 @@ func createMenuPropSpec() map[string]map[string]*prop.Prop {
 	return map[string]map[string]*prop.Prop{
 		"com.canonical.dbusmenu": {
 			"Version": {
-				Value:    instance.menuVersion,
+				Value:    atomic.LoadUint32(&instance.menuVersion),
 				Writable: true,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
@@ -493,9 +494,11 @@ func refresh() {
 	if instance.conn == nil || instance.menuProps == nil {
 		return
 	}
-	instance.menuVersion++
+	// menuVersion is read under menuLock (GetLayout) and written here under
+	// lock, so it is accessed atomically rather than relying on either lock.
+	version := atomic.AddUint32(&instance.menuVersion, 1)
 	dbusErr := instance.menuProps.Set("com.canonical.dbusmenu", "Version",
-		dbus.MakeVariant(instance.menuVersion))
+		dbus.MakeVariant(version))
 	if dbusErr != nil {
 		log.Printf("systray error: failed to update menu version: %v\n", dbusErr)
 		return
@@ -503,7 +506,7 @@ func refresh() {
 	err := menu.Emit(instance.conn, &menu.Dbusmenu_LayoutUpdatedSignal{
 		Path: menuPath,
 		Body: &menu.Dbusmenu_LayoutUpdatedSignalBody{
-			Revision: instance.menuVersion,
+			Revision: version,
 		},
 	})
 	if err != nil {
@@ -515,7 +518,7 @@ func resetMenu() {
 	instance.menuLock.Lock()
 	defer instance.menuLock.Unlock()
 	instance.menu = &menuLayout{}
-	instance.menuVersion++
+	atomic.AddUint32(&instance.menuVersion, 1)
 	firstGetLayoutDone = false
 	refresh()
 }
