@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/png" // used only here
 	"log"
 	"os"
@@ -568,11 +569,11 @@ func argbForImage(img image.Image) []byte {
 	i := 0
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			r, g, b, a := img.At(x, y).RGBA()
-			data[i] = byte(a)
-			data[i+1] = byte(r)
-			data[i+2] = byte(g)
-			data[i+3] = byte(b)
+			c := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+			data[i] = c.A
+			data[i+1] = c.R
+			data[i+2] = c.G
+			data[i+3] = c.B
 			i += 4
 		}
 	}
