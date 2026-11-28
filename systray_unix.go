@@ -82,14 +82,26 @@ func SetIconThemePath(themePath string) {
 	props.SetMust("org.kde.StatusNotifierItem", "IconThemePath", iconThemePath)
 }
 
-// iconPixmapValue returns the IconPixmap property value.
-// If iconData is empty, it returns an empty array to allow fallback to IconName;
-// otherwise, it returns the converted pixel data.
-func iconPixmapValue(iconData []byte) []PX {
+// iconPixmapValue returns the IconPixmap property value, preferring the
+// multi-size list from SetIconPixmaps over the single image from SetIcon.
+// With neither set it returns an empty array, allowing a fallback to IconName.
+func iconPixmapValue(iconData []byte, iconPixmapList [][]byte) []PX {
+	if len(iconPixmapList) > 0 {
+		return pixmapsFromBytes(iconPixmapList)
+	}
 	if len(iconData) == 0 {
 		return []PX{}
 	}
 	return []PX{convertToPixels(iconData)}
+}
+
+// pixmapsFromBytes converts each image to an SNI icon pixmap.
+func pixmapsFromBytes(list [][]byte) []PX {
+	out := make([]PX, 0, len(list))
+	for _, b := range list {
+		out = append(out, convertToPixels(b))
+	}
+	return out
 }
 
 // SetTemplateIcon sets the systray icon as a template icon (on macOS), falling back
@@ -107,6 +119,7 @@ func SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte) {
 func SetIcon(iconBytes []byte) {
 	instance.lock.Lock()
 	instance.iconData = iconBytes
+	instance.iconPixmapList = nil
 	props := instance.props
 	conn := instance.conn
 	defer instance.lock.Unlock()
@@ -140,6 +153,38 @@ func SetIconFromFilePath(iconFilePath string) error {
 	}
 	SetIcon(bytes)
 	return nil
+}
+
+// SetIconPixmaps sets the systray icon to several pre-rendered images at once.
+// Hosts pick the smallest entry that is at least the requested physical size
+// (GNOME's AppIndicator extension does this in pixmapsUtils.getBestPixmap),
+// so supplying the common panel sizes lets them render an exact-size bitmap
+// instead of rescaling a single large pixmap — which is what looks blurry.
+// Each entry holds image bytes as accepted by SetIcon. The list takes
+// precedence over an earlier SetIcon; a later SetIcon clears it.
+func SetIconPixmaps(list [][]byte) {
+	instance.lock.Lock()
+	instance.iconPixmapList = list
+	props := instance.props
+	conn := instance.conn
+	defer instance.lock.Unlock()
+
+	if props == nil {
+		return
+	}
+
+	props.SetMust("org.kde.StatusNotifierItem", "IconPixmap", pixmapsFromBytes(list))
+	if conn == nil {
+		return
+	}
+
+	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewIconSignal{
+		Path: path,
+		Body: &notifier.StatusNotifierItem_NewIconSignalBody{},
+	})
+	if err != nil {
+		log.Printf("systray error: failed to emit new icon signal: %s\n", err)
+	}
 }
 
 // SetTitle sets the systray title, only available on Mac and Linux.
@@ -410,6 +455,9 @@ type tray struct {
 
 	// icon data for the main systray icon
 	iconData []byte
+	// iconPixmapList holds pre-rendered images published by SetIconPixmaps.
+	// When non-empty it takes precedence over iconData.
+	iconPixmapList [][]byte
 	// title and tooltip state
 	title, tooltipTitle string
 	// hidden is set by Hide: the item is Passive.
@@ -462,7 +510,7 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 				Callback: nil,
 			},
 			"IconPixmap": {
-				Value:    iconPixmapValue(t.iconData),
+				Value:    iconPixmapValue(t.iconData, t.iconPixmapList),
 				Writable: true,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
