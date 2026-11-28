@@ -280,6 +280,36 @@ func quit() {
 	close(quitChan)
 }
 
+// sniIntrospection returns the StatusNotifierItem interface with methods whose
+// handler is not registered removed. GNOME's AppIndicator extension decides
+// whether a single primary click is deferred by the double-click timeout by
+// looking up "Activate" in this introspection data; a menu-only tray must not
+// advertise it, otherwise every left click waits ~400ms before the menu opens.
+// The same applies to "SecondaryActivate" and SetOnSecondaryTapped.
+func sniIntrospection() introspect.Interface {
+	iface := notifier.IntrospectDataStatusNotifierItem
+	if tappedLeft == nil {
+		iface.Methods = withoutMethod(iface.Methods, "Activate")
+	}
+	if tappedRight == nil {
+		iface.Methods = withoutMethod(iface.Methods, "SecondaryActivate")
+	}
+	return iface
+}
+
+// withoutMethod returns a copy of methods without the named method. The
+// receiver is resliced with zero capacity so the backing array of the shared
+// generated data is never mutated.
+func withoutMethod(methods []introspect.Method, name string) []introspect.Method {
+	out := methods[:0:0]
+	for _, m := range methods {
+		if m.Name != name {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 func nativeStart() {
 	systrayReady()
 	conn, err := dbus.SessionBus()
@@ -319,7 +349,7 @@ func nativeStart() {
 		Interfaces: []introspect.Interface{
 			introspect.IntrospectData,
 			prop.IntrospectData,
-			notifier.IntrospectDataStatusNotifierItem,
+			sniIntrospection(),
 		},
 	}
 	err = conn.Export(introspect.NewIntrospectable(&node), path,
